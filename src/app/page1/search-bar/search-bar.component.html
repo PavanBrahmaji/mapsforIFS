@@ -1,0 +1,101 @@
+<div class="search-wrapper">
+  <!-- Title -->
+  <h2 class="search-title">Mark your site boundary *</h2>
+  
+  <!-- Offline Indicator -->
+  @if (isOfflineMode) {
+    <div class="offline-indicator">
+      <mat-icon class="offline-icon">wifi_off</mat-icon>
+      <span>Working offline - Limited search results</span>
+    </div>
+  }
+
+  <!-- Search Bar -->
+  <div class="search-container">
+    <form class="search-form" (submit)="handleSubmit($event)">
+      <div class="search-input-group">
+     
+        <input
+          type="text"
+          class="search-input"
+          [formControl]="searchControl"
+          placeholder="Search for locations..."
+        />
+        @if (searchControl.value) {
+          <button type="button" class="clear-button" (click)="handleClear()">
+            <mat-icon>close</mat-icon>
+          </button>
+        }
+        <button type="submit" class="search-button" [disabled]="isLoading">
+          @if (isLoading) {
+            <mat-icon class="loading-spinner">refresh</mat-icon>
+          } @else {
+            <mat-icon>search</mat-icon>
+          }
+        </button>
+      </div>
+    </form>
+
+    <!-- Search Results Dropdown -->
+   
+  </div>
+
+  <!-- Location List Section -->
+  <div class="location-list-section">
+    
+
+    <div class="location-items">
+      <!-- Show message when no locations are selected -->
+      @if (selectedLocations.length === 0 ) {
+        <div class="no-locations-message">
+          <mat-icon class="info-icon">info_outline</mat-icon>
+          <span>Search and select locations to mark your site boundary</span>
+        </div>
+      }
+
+       @if (showResults && results.length > 0) {
+      <div class="results-container">
+        @for (location of results; track location.id) {
+
+        <div class="location-item" (click)="handleSelect(location)">
+            <div class="location-name">
+            <mat-icon class="location-pin">place</mat-icon>
+            <div class="location-title">{{ location.label }}</div>
+          </div>
+         </div>
+        }
+      </div>
+    }
+
+    
+
+      <!-- Dynamic location items from search results -->
+      @for (location of selectedLocations; track location.id || location.label) {
+        <div class="location-item" [class.selected]="selectedLocation?.label === location.label">
+          <div class="location-name">
+            <mat-icon class="location-pin">place</mat-icon>
+            <div class="location-title">{{ location.label }}</div>
+          </div>
+          @if (location.x && location.y) {
+            <div class="location-address">
+              Lat: {{ location.y.toFixed(6) }}, Lng: {{ location.x.toFixed(6) }}
+            </div>
+          }
+          <button class="remove-location-btn" (click)="removeLocation(location)" type="button">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Bottom Action Buttons -->
+  <div class="bottom-actions">
+    <button class="reset-button" (click)="handleReset()" [disabled]="selectedLocations.length === 0">
+      Reset
+    </button>
+    <button class="confirm-button" (click)="handleConfirm()" [disabled]="selectedLocations.length === 0">
+      Confirm
+    </button>
+  </div>
+</div>
