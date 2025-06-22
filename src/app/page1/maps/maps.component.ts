@@ -1,9 +1,10 @@
 import { Component, Input, ViewChild } from '@angular/core';
 import { GlobeComponent } from './globe/globe.component';
+import { LeafletMapsComponent } from './leaflet-maps/leaflet-maps.component';
 
 @Component({
   selector: 'app-maps',
-  imports: [GlobeComponent],
+  imports: [GlobeComponent,LeafletMapsComponent],
   templateUrl: './maps.component.html',
   styleUrl: './maps.component.css'
 })

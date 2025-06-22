@@ -57,10 +57,7 @@ export class GlobeComponent implements OnInit, OnDestroy {
 
   private async loadTextures(): Promise<void> {
     const texturePromises = [
-      this.loadTexture('images/earth.jpg', 'map'),
-      // this.loadTexture('images/nightmap.jpg', 'bumpMap'),
-      // this.loadTexture('assets/textures/earth-specular.jpg', 'specularMap'),
-      // this.loadTexture('images/clouds.jpg', 'clouds')
+      this.loadTexture('images/earth.jpg', 'map')
     ];
 
     await Promise.all(texturePromises);
@@ -231,16 +228,16 @@ export class GlobeComponent implements OnInit, OnDestroy {
     this.controls.autoRotate = this.autoRotate;
   }
 
- public startAutoRotation(): void {
-  this.autoRotate = true;
-  if (this.controls) {
-    this.controls.autoRotate = true;
-    // Reset camera zoom and view to default
-    this.camera.position.set(0, 0, this.EARTH_RADIUS * 2.5);
-    this.controls.target.set(0, 0, 0);
-    this.controls.update();
+  public startAutoRotation(): void {
+    this.autoRotate = true;
+    if (this.controls) {
+      this.controls.autoRotate = true;
+      this.controls.update();
+    }
+    // Removed static camera reset marks:
+    // this.camera.position.set(0, 0, this.EARTH_RADIUS * 2.5);
+    // this.controls.target.set(0, 0, 0);
   }
-}
 
   public flyTo(lat: number, lng: number, onComplete?: () => void): void {
     const phi = (90 - lat) * (Math.PI / 180);
