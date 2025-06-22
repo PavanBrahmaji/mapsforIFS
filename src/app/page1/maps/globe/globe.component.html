@@ -9,16 +9,3 @@
   </div>
 </div>
 
-<div class="controls">
-  <button (click)="toggleAutoRotation()" class="control-button">
-    {{ autoRotate ? 'Pause Rotation' : 'Resume Rotation' }}
-  </button>
-  <button (click)="flyTo(0, 0)" class="control-button">Reset View</button>
-</div>
-
-<div class="location-buttons">
-  <button (click)="flyTo(12.971003, 77.605569)" class="location-button">New York</button>
-  <button (click)="flyTo(51.5074, -0.1278)" class="location-button">London</button>
-  <button (click)="flyTo(35.6762, 139.6503)" class="location-button">Tokyo</button>
-  <button (click)="flyTo(-33.8688, 151.2093)" class="location-button">Sydney</button>
-</div>

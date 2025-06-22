@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { FormControl } from '@angular/forms';
-import { debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs/operators';
+import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 import { Subject } from 'rxjs';
 import { ReactiveFormsModule } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -17,7 +17,9 @@ export class SearchBarComponent implements OnInit, OnDestroy {
   @Output() locationSelect = new EventEmitter<Location>();
   @Output() resetLocations = new EventEmitter<void>();
   @Output() confirmLocations = new EventEmitter<Location[]>();
-  
+  @Output() locationSelected = new EventEmitter<{ lat: number, lng: number }>();
+  @Output() startGlobeRotation = new EventEmitter<void>();
+
   searchControl = new FormControl('');
   results: Location[] = [];
   selectedLocations: Location[] = [];
@@ -33,7 +35,6 @@ export class SearchBarComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.checkOnlineStatus();
     this.setupSearchListener();
-    
     window.addEventListener('online', this.updateOnlineStatus);
     window.addEventListener('offline', this.updateOnlineStatus);
   }
@@ -86,11 +87,9 @@ export class SearchBarComponent implements OnInit, OnDestroy {
     searchLocations(query).then(locations => {
       this.results = locations;
       this.showResults = true;
-      
       if (locations.length === 0) {
         this.showNoResultsWarning();
       }
-      
       if (this.isOfflineMode && locations.length > 0) {
         this.showOfflineDataWarning();
       }
@@ -123,27 +122,15 @@ export class SearchBarComponent implements OnInit, OnDestroy {
 
   handleSelect(location: Location): void {
     console.log('Location selected in search component:', location);
-    
-    // Check if location is already selected
-    const isAlreadySelected = this.selectedLocations.some(
-      loc => loc.label === location.label || (loc.x === location.x && loc.y === location.y)
-    );
-    
-    if (!isAlreadySelected) {
-      this.selectedLocations.push(location);
-      this.selectedLocation = location;
-      
-      this.snackBar.open(`Added: ${location.label}`, 'Dismiss', {
-        duration: 2000,
-      });
-      
-      this.locationSelect.emit(location);
-    } else {
-      this.snackBar.open(`Location already selected: ${location.label}`, 'Dismiss', {
-        duration: 2000,
-      });
-    }
-    
+    // Only allow one selection at a time
+    this.selectedLocations = [location];
+    this.selectedLocation = location;
+    this.snackBar.open(`Added: ${location.label}`, 'Dismiss', {
+      duration: 2000,
+    });
+    this.locationSelect.emit(location);
+    this.locationSelected.emit({ lat: location.y, lng: location.x });
+
     // Clear search after selection
     this.searchControl.setValue('');
     this.showResults = false;
@@ -151,14 +138,13 @@ export class SearchBarComponent implements OnInit, OnDestroy {
   }
 
   removeLocation(location: Location): void {
+    this.startGlobeRotation.emit(); // Notify parent to start rotation
     this.selectedLocations = this.selectedLocations.filter(
       loc => loc.label !== location.label
     );
-    
     if (this.selectedLocation?.label === location.label) {
       this.selectedLocation = this.selectedLocations.length > 0 ? this.selectedLocations[this.selectedLocations.length - 1] : null;
     }
-    
     this.snackBar.open(`Removed: ${location.label}`, 'Dismiss', {
       duration: 2000,
     });
@@ -168,12 +154,12 @@ export class SearchBarComponent implements OnInit, OnDestroy {
     this.searchControl.setValue('');
     this.results = [];
     this.showResults = false;
+    this.startGlobeRotation.emit(); // Notify parent to start rotation
   }
 
   handleSubmit(event: Event): void {
     event.preventDefault();
     const query = this.searchControl.value;
-    
     if (this.results.length > 0) {
       this.handleSelect(this.results[0]);
     } else if (query && query.length >= 3) {
@@ -202,6 +188,7 @@ export class SearchBarComponent implements OnInit, OnDestroy {
     this.snackBar.open('All locations cleared', 'Dismiss', {
       duration: 2000,
     });
+    this.startGlobeRotation.emit(); // Notify parent to start rotation
   }
 
   handleConfirm(): void {

@@ -9,5 +9,10 @@ import { MapsComponent } from './maps/maps.component';
   styleUrl: './page1.component.css'
 })
 export class Page1Component {
+public selectedLocation: { lat: number, lng: number } | null = null;
+
+  locationSelect(location: { lat: number, lng: number }) {
+    this.selectedLocation = location;
+  }
 
 }

@@ -20,6 +20,7 @@
           class="search-input"
           [formControl]="searchControl"
           placeholder="Search for locations..."
+          [disabled]="selectedLocations.length > 0"
         />
         @if (searchControl.value) {
           <button type="button" class="clear-button" (click)="handleClear()">
@@ -49,39 +50,36 @@
       @if (selectedLocations.length === 0 ) {
         <div class="no-locations-message">
           <mat-icon class="info-icon">info_outline</mat-icon>
-          <span>Search and select locations to mark your site boundary</span>
+          <span>Search and select a location to mark your site boundary</span>
         </div>
       }
 
-       @if (showResults && results.length > 0) {
-      <div class="results-container">
-        @for (location of results; track location.id) {
-
-        <div class="location-item" (click)="handleSelect(location)">
-            <div class="location-name">
-            <mat-icon class="location-pin">place</mat-icon>
-            <div class="location-title">{{ location.label }}</div>
-          </div>
-         </div>
-        }
-      </div>
-    }
-
-    
-
-      <!-- Dynamic location items from search results -->
-      @for (location of selectedLocations; track location.id || location.label) {
-        <div class="location-item" [class.selected]="selectedLocation?.label === location.label">
-          <div class="location-name">
-            <mat-icon class="location-pin">place</mat-icon>
-            <div class="location-title">{{ location.label }}</div>
-          </div>
-          @if (location.x && location.y) {
-            <div class="location-address">
-              Lat: {{ location.y.toFixed(6) }}, Lng: {{ location.x.toFixed(6) }}
+      @if (showResults && results.length > 0) {
+        <div class="results-container">
+          @for (location of results; track location.id) {
+            <div class="location-item" (click)="handleSelect(location)">
+              <div class="location-name">
+                <mat-icon class="location-pin">place</mat-icon>
+                <div class="location-title">{{ location.label }}</div>
+              </div>
             </div>
           }
-          <button class="remove-location-btn" (click)="removeLocation(location)" type="button">
+        </div>
+      }
+
+      <!-- Only show one selected location -->
+      @if (selectedLocations.length > 0) {
+        <div class="location-item selected">
+          <div class="location-name">
+            <mat-icon class="location-pin">place</mat-icon>
+            <div class="location-title">{{ selectedLocations[0].label }}</div>
+          </div>
+          @if (selectedLocations[0].x && selectedLocations[0].y) {
+            <div class="location-address">
+              Lat: {{ selectedLocations[0].y.toFixed(6) }}, Lng: {{ selectedLocations[0].x.toFixed(6) }}
+            </div>
+          }
+          <button class="remove-location-btn" (click)="removeLocation(selectedLocations[0])" type="button">
             <mat-icon>close</mat-icon>
           </button>
         </div>

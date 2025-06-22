@@ -1,4 +1,7 @@
 <div class="map-container">
-  <app-search-bar></app-search-bar>
-  <app-maps></app-maps>
+  <app-search-bar
+    (locationSelected)="locationSelect($event)"
+    (startGlobeRotation)="maps.startGlobeRotation()">
+  </app-search-bar>
+  <app-maps #maps [selectedLocation]="selectedLocation"></app-maps>
 </div>

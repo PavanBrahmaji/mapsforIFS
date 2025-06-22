@@ -1,5 +1,5 @@
 // globe.component.ts
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three-orbitcontrols-ts';
 
@@ -10,6 +10,8 @@ import { OrbitControls } from 'three-orbitcontrols-ts';
 })
 export class GlobeComponent implements OnInit, OnDestroy {
   @ViewChild('globeContainer', { static: true }) globeContainer!: ElementRef;
+
+  // ...rest of your code...
 
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
@@ -53,16 +55,16 @@ export class GlobeComponent implements OnInit, OnDestroy {
     });
   }
 
- private async loadTextures(): Promise<void> {
-  const texturePromises = [
-    this.loadTexture('images/earth.jpg', 'map'),
-    // this.loadTexture('images/nightmap.jpg', 'bumpMap'),
-    // this.loadTexture('assets/textures/earth-specular.jpg', 'specularMap'),
-    // this.loadTexture('images/clouds.jpg', 'clouds')
-  ];
+  private async loadTextures(): Promise<void> {
+    const texturePromises = [
+      this.loadTexture('images/earth.jpg', 'map'),
+      // this.loadTexture('images/nightmap.jpg', 'bumpMap'),
+      // this.loadTexture('assets/textures/earth-specular.jpg', 'specularMap'),
+      // this.loadTexture('images/clouds.jpg', 'clouds')
+    ];
 
-  await Promise.all(texturePromises);
-}
+    await Promise.all(texturePromises);
+  }
 
   private loadTexture(path: string, key: keyof typeof this.earthTextures): Promise<void> {
     return new Promise((resolve) => {
@@ -93,16 +95,19 @@ export class GlobeComponent implements OnInit, OnDestroy {
     this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     this.camera.position.z = this.EARTH_RADIUS * 2.5;
 
-    // Renderer
+    // Renderer - NO shadow map enabled
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.globeContainer.nativeElement.appendChild(this.renderer.domElement);
 
-    // Controls
+    // Controls (mouse controls disabled)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableZoom = false;
+    this.controls.enableRotate = false;
+    this.controls.enablePan = false;
     this.controls.autoRotate = this.autoRotate;
-    this.controls.autoRotateSpeed = 0.5;
+    this.controls.autoRotateSpeed = 0.15; // Decreased from 0.5 for slower rotation
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = this.EARTH_RADIUS * 1.5;
@@ -119,47 +124,44 @@ export class GlobeComponent implements OnInit, OnDestroy {
     // Earth geometry
     const geometry = new THREE.SphereGeometry(this.EARTH_RADIUS, 64, 64);
 
-    // Earth material with textures
-    const earthMaterial = new THREE.MeshPhongMaterial({
+    // Earth material - Use MeshBasicMaterial for zero lighting influence
+    const earthMaterial = new THREE.MeshBasicMaterial({
       map: this.earthTextures.map || undefined,
-      bumpMap: this.earthTextures.bumpMap || undefined,
-      bumpScale: 0.05,
-      specularMap: this.earthTextures.specularMap || undefined,
-      specular: new THREE.Color('grey'),
-      shininess: 5
+      // MeshBasicMaterial ignores all lighting for perfectly uniform appearance
     });
 
-    // Earth mesh
+    // Earth mesh - NO shadow casting/receiving
     const earth = new THREE.Mesh(geometry, earthMaterial);
     this.globe.add(earth);
 
-    // Clouds layer (if texture loaded)
+    // Clouds layer (if texture loaded) - NO shadow properties
     if (this.earthTextures.clouds) {
       const cloudsGeometry = new THREE.SphereGeometry(this.EARTH_RADIUS * 1.005, 64, 64);
-      const cloudsMaterial = new THREE.MeshPhongMaterial({
+      // Clouds material - Use MeshBasicMaterial for uniform lighting
+      const cloudsMaterial = new THREE.MeshBasicMaterial({
         map: this.earthTextures.clouds,
         transparent: true,
         opacity: 0.4,
         depthWrite: false
+        // MeshBasicMaterial ensures clouds are uniformly lit
       });
       const clouds = new THREE.Mesh(cloudsGeometry, cloudsMaterial);
       this.globe.add(clouds);
     }
 
-    // Atmosphere effect
+    // Atmosphere effect - Use MeshBasicMaterial for uniform color
     const atmosphere = new THREE.Mesh(
       new THREE.SphereGeometry(this.EARTH_RADIUS * 1.1, 64, 64),
-      new THREE.MeshPhongMaterial({
+      new THREE.MeshBasicMaterial({
         color: 0x5599ff,
         transparent: true,
         opacity: 0.2,
-        specular: 0x111111,
-        shininess: 5,
+        // MeshBasicMaterial ensures uniform blue atmosphere color
       })
     );
     this.globe.add(atmosphere);
 
-    // Add lights
+    // Add lights - NO shadow casting
     const ambientLight = new THREE.AmbientLight(0x404040);
     this.scene.add(ambientLight);
 
@@ -203,7 +205,7 @@ export class GlobeComponent implements OnInit, OnDestroy {
     // Rotate clouds if they exist
     const clouds = this.globe.children.find(child => 
       child instanceof THREE.Mesh && 
-      child.material instanceof THREE.MeshPhongMaterial && 
+      child.material instanceof THREE.MeshBasicMaterial && 
       child.material.transparent
     );
     
@@ -229,46 +231,108 @@ export class GlobeComponent implements OnInit, OnDestroy {
     this.controls.autoRotate = this.autoRotate;
   }
 
-  public flyTo(lat: number, lng: number): void {
+ public startAutoRotation(): void {
+  this.autoRotate = true;
+  if (this.controls) {
+    this.controls.autoRotate = true;
+    // Reset camera zoom and view to default
+    this.camera.position.set(0, 0, this.EARTH_RADIUS * 2.5);
+    this.controls.target.set(0, 0, 0);
+    this.controls.update();
+  }
+}
+
+  public flyTo(lat: number, lng: number, onComplete?: () => void): void {
     const phi = (90 - lat) * (Math.PI / 180);
     const theta = (lng + 180) * (Math.PI / 180);
-    
+
     const x = -this.EARTH_RADIUS * Math.sin(phi) * Math.cos(theta);
     const y = this.EARTH_RADIUS * Math.cos(phi);
     const z = this.EARTH_RADIUS * Math.sin(phi) * Math.sin(theta);
-    
-    const wasAutoRotating = this.controls.autoRotate;
+
+    // Stop rotation immediately
     this.controls.autoRotate = false;
-    
-    const targetPosition = new THREE.Vector3(
-      x * 1.5,
-      y * 1.5,
-      z * 1.5
-    );
-    
-    const duration = 2000;
-    const startTime = Date.now();
-    
-    const animateCamera = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const t = 1 - Math.pow(1 - progress, 3);
-      
-      this.camera.position.lerpVectors(
-        this.camera.position,
-        targetPosition,
-        t
-      );
-      
-      this.controls.target.set(x * 0.2, y * 0.2, z * 0.2);
-      
+    this.autoRotate = false;
+
+    // Always keep the axis at the center
+    this.controls.target.set(0, 0, 0);
+
+    // Step 1: Move to the direction of the target, keeping current distance
+    const currentDistance = this.camera.position.length();
+    const startDirection = this.camera.position.clone().normalize();
+    const endDirection = new THREE.Vector3(x, y, z).normalize();
+    const moveTargetPosition = endDirection.clone().multiplyScalar(currentDistance);
+
+    // Step 2: Zoom in much closer to the target distance for a "dive in" effect
+    const zoomTargetPosition = endDirection.clone().multiplyScalar(this.EARTH_RADIUS * 0.6);
+
+    const moveDuration = 2500; // ms (slower for more drama)
+    const zoomDuration = 2000; // ms
+
+    function easeInOutCubic(t: number): number {
+      return t < 0.5
+        ? 4 * t * t * t
+        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    // Step 1: Move to the target direction
+    const moveStart = this.camera.position.clone();
+    const moveEnd = moveTargetPosition.clone();
+    const moveStartTime = Date.now();
+
+    const moveToDirection = () => {
+      const elapsed = Date.now() - moveStartTime;
+      const progress = Math.min(elapsed / moveDuration, 1);
+      const t = easeInOutCubic(progress);
+
+      // Interpolate direction at constant distance
+      const currentDir = startDirection.clone().lerp(endDirection, t).normalize();
+      const currentPos = currentDir.multiplyScalar(currentDistance);
+      this.camera.position.copy(currentPos);
+
+      this.controls.target.set(0, 0, 0);
+
       if (progress < 1) {
-        requestAnimationFrame(animateCamera);
+        requestAnimationFrame(moveToDirection);
       } else {
-        this.controls.autoRotate = wasAutoRotating;
+        // Step 2: Zoom in to the location
+        const zoomStart = this.camera.position.clone();
+        const zoomEnd = zoomTargetPosition.clone();
+        const zoomStartTime = Date.now();
+
+        let zoomDistance = currentDistance;
+        const minDistance = 0; // Allow camera to go to the center of the globe
+
+        const zoomIn = () => {
+          const elapsedZoom = Date.now() - zoomStartTime;
+          const progressZoom = Math.min(elapsedZoom / zoomDuration, 1);
+          const tZoom = easeInOutCubic(progressZoom);
+
+          // Interpolate distance along the same direction
+          zoomDistance -= 0.05; // Speed of zoom-in, decrease for slower
+          if (zoomDistance < minDistance) zoomDistance = minDistance;
+
+          const zoomPos = endDirection.clone().multiplyScalar(zoomDistance);
+          this.camera.position.copy(zoomPos);
+          this.controls.target.set(0, 0, 0);
+
+          if (progressZoom < 1) {
+            requestAnimationFrame(zoomIn);
+          } else {
+            this.camera.position.copy(zoomEnd);
+            this.controls.target.set(0, 0, 0);
+            this.controls.autoRotate = false;
+            this.autoRotate = false;
+            // Call the callback to load Leaflet map
+            if (onComplete) {
+              onComplete();
+            }
+          }
+        };
+        zoomIn();
       }
     };
-    
-    animateCamera();
+
+    moveToDirection();
   }
 }
