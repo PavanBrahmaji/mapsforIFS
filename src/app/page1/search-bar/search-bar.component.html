@@ -87,7 +87,7 @@
 
   <!-- Bottom Action Buttons -->
   <div class="bottom-actions">
-    <button class="reset-button" (click)="handleReset()" [disabled]="selectedLocations.length === 0 && !drawingsGeoJson === null">
+    <button class="reset-button" (click)="handleReset()" [disabled]="selectedLocations.length === 0">
       Reset
     </button>
     <button class="confirm-button" (click)="handleConfirm()" [disabled]="selectedLocations.length === 0 && !drawingsGeoJson === null">

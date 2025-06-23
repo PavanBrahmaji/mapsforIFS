@@ -16,7 +16,6 @@ const iconDefault = L.icon({
 });
 L.Marker.prototype.options.icon = iconDefault;
 
-// Type declaration to fix the GeoSearchControl constructor issue
 declare module 'leaflet-geosearch' {
   interface GeoSearchControl {
     new (options: any): any;
@@ -73,49 +72,15 @@ public drawingsGeoJson: any = null;
     // Add zoom control to the bottom right
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 
-    // Define base layers
-    const baseLayers = {
-      "OpenStreetMap": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-      }),
-      "Google Streets": L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-        maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-        attribution: '© Google'
-      }),
-      "Google Hybrid": L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
-        maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-        attribution: '© Google'
-      }),
-      "Google Satellite": L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-        maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-        attribution: '© Google'
-      }),
-      "Google Terrain": L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
-        maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-        attribution: '© Google'
-      })
-    };
+    // Use only OpenStreetMap as the base layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(this.map);
 
-    const overlays = {};
-
-    // Add layer control
-    L.control.layers(baseLayers, overlays).addTo(this.map);
-
-    // Set default layer (choose one of the remaining, e.g., OpenStreetMap)
-    baseLayers["OpenStreetMap"].addTo(this.map);
+    // Remove baseLayers and overlays logic, and do not add L.control.layers
 
     // Initialize drawing
     this.initializeDrawing();
-
-    // Removed static sample data
-    // this.addSampleData();
-
-    // Add search control
-    // this.addSearchControl();
   }
 
   private initializeDrawing(): void {
