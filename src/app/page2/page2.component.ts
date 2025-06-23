@@ -53,6 +53,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
 
     this.initializeDrawing();
     this.loadPolygonBoundariesFromLocalStorage(); // Only load polygons as boundaries
+    this.loadMarkerFromLocalStorage(); // Load saved marker if exists
   }
 
   private initializeDrawing(): void {
@@ -99,6 +100,8 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
           alert('Marker must be placed inside the boundary.');
           return; // Do not add marker
         }
+        // Make marker draggable
+        this.makeMarkerDraggable(layer);
         // Save marker location to localStorage
         this.saveMarkerLocationToLocalStorage(layer);
         // Add marker to map
@@ -111,6 +114,110 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
         this.saveDrawingsInApp();
       }
     });
+  }
+
+  // Make marker draggable and handle drag events
+  private makeMarkerDraggable(marker: L.Marker): void {
+    marker.options.draggable = true;
+    marker.dragging?.enable();
+
+    // Handle drag start
+    marker.on('dragstart', (e) => {
+      console.log('Marker drag started');
+    });
+
+    // Handle drag
+    marker.on('drag', (e) => {
+      const draggedMarker = e.target as L.Marker;
+      const newLatLng = draggedMarker.getLatLng();
+      
+      // Optional: Show coordinates while dragging
+      console.log(`Dragging to: ${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`);
+    });
+
+    // Handle drag end - validate position and save
+    marker.on('dragend', (e) => {
+      const draggedMarker = e.target as L.Marker;
+      const newLatLng = draggedMarker.getLatLng();
+      
+      // Check if new position is still inside the polygon boundary
+      if (this.boundaryPolygonLayer) {
+        if (
+          !this.boundaryPolygonLayer.getBounds().contains(newLatLng) ||
+          !leafletPointInPolygon(newLatLng, this.boundaryPolygonLayer)
+        ) {
+          alert('Marker must stay inside the boundary. Moving back to previous position.');
+          // Revert to previous position (you could store the last valid position)
+          const savedMarker = this.getSavedMarkerLocation();
+          if (savedMarker) {
+            draggedMarker.setLatLng([savedMarker.lat, savedMarker.lng]);
+          }
+          return;
+        }
+      }
+      
+      // Save new position
+      this.saveMarkerLocationToLocalStorage(draggedMarker);
+      this.saveDrawingsInApp();
+      console.log(`Marker moved to: ${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`);
+    });
+  }
+
+  // Load marker from localStorage if it exists
+  private loadMarkerFromLocalStorage(): void {
+    const savedMarkerData = this.getSavedMarkerLocation();
+    if (savedMarkerData && this.boundaryPolygonLayer) {
+      const markerLatLng = L.latLng(savedMarkerData.lat, savedMarkerData.lng);
+      
+      // Verify the saved marker is still within bounds
+      if (
+        this.boundaryPolygonLayer.getBounds().contains(markerLatLng) &&
+        leafletPointInPolygon(markerLatLng, this.boundaryPolygonLayer)
+      ) {
+        const marker = L.marker([savedMarkerData.lat, savedMarkerData.lng]);
+        this.makeMarkerDraggable(marker);
+        this.drawnItems.addLayer(marker);
+        this.saveDrawingsInApp();
+        
+        // Disable marker tool since we have a marker
+        const createDrawControl = (enableMarker: boolean) => {
+          if (this.drawControl) {
+            this.map.removeControl(this.drawControl);
+          }
+          this.drawControl = new L.Control.Draw({
+            position: 'topright',
+            draw: {
+              circle: false,
+              circlemarker: false,
+              marker: enableMarker ? {} : false,
+              polygon: false,
+              polyline: false,
+              rectangle: false
+            },
+            edit: {
+              featureGroup: this.drawnItems,
+              edit: false,
+              remove: false
+            }
+          });
+          this.map.addControl(this.drawControl);
+        };
+        createDrawControl(false);
+      }
+    }
+  }
+
+  // Get saved marker location from localStorage
+  private getSavedMarkerLocation(): {lat: number, lng: number} | null {
+    const savedMarkerData = localStorage.getItem('markerLocation');
+    if (savedMarkerData) {
+      try {
+        return JSON.parse(savedMarkerData);
+      } catch (e) {
+        console.error('Failed to parse saved marker location:', e);
+      }
+    }
+    return null;
   }
 
   // Load only polygon boundaries from localStorage and add to map
@@ -160,6 +267,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
   public resetDrawings(): void {
     this.drawnItems.clearLayers();
     localStorage.removeItem('leafletDrawings');
+    localStorage.removeItem('markerLocation'); // Also remove saved marker
     this.drawingsGeoJson = null;
     if (this.map && this.drawnItems) {
       this.initializeDrawing();
@@ -190,6 +298,40 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     localStorage.setItem('markerLocation', JSON.stringify(markerData));
   }
 
+  // Public method to remove existing marker and enable placing a new one
+  public removeMarker(): void {
+    const layers = this.drawnItems.getLayers();
+    layers.forEach(layer => {
+      if (layer instanceof L.Marker) {
+        this.drawnItems.removeLayer(layer);
+      }
+    });
+    localStorage.removeItem('markerLocation');
+    this.saveDrawingsInApp();
+    
+    // Re-enable marker tool
+    if (this.drawControl) {
+      this.map.removeControl(this.drawControl);
+    }
+    this.drawControl = new L.Control.Draw({
+      position: 'topright',
+      draw: {
+        circle: false,
+        circlemarker: false,
+        marker: {}, // Enable marker tool
+        polygon: false,
+        polyline: false,
+        rectangle: false
+      },
+      edit: {
+        featureGroup: this.drawnItems,
+        edit: false,
+        remove: false
+      }
+    });
+    this.map.addControl(this.drawControl);
+  }
+
   private emitDrawingsChanged() {
     this.drawingsChanged.emit(this.drawingsGeoJson);
   }
@@ -208,4 +350,3 @@ function leafletPointInPolygon(latlng: L.LatLng, polygon: L.Polygon): boolean {
   }
   return inside;
 }
-
