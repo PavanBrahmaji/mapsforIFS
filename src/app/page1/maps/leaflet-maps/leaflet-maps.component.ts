@@ -1,7 +1,8 @@
-import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, DestroyRef, inject, Input, OnChanges, SimpleChanges, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, DestroyRef, inject, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
 import 'leaflet-draw';
+import { GlobalService } from '../../../global.service'; // Add this import
 
 // Fix for default markers - Using CDN URLs (simplest solution)
 const iconDefault = L.icon({
@@ -29,24 +30,20 @@ declare module 'leaflet-geosearch' {
   styleUrl: './leaflet-maps.component.css'
 })
 export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
-  private destroyRef = inject(DestroyRef);
 
   @ViewChild('mapContainer', { static: false }) mapContainer!: ElementRef;
 
   @Input() lat: number = 39.8283; // Default: Center latitude for United States
   @Input() lon: number = -98.5795; // Default: Center longitude for United States
 
-  @Output() drawingsChanged = new EventEmitter<any>();
-
   map!: L.Map;
   marker!: L.Marker;
   dbMarkers: L.Marker[] = [];
   markers: any[] = [];
   drawnItems!: L.FeatureGroup;
-  private drawControl?: L.Control.Draw; // <-- Make drawControl a class property
+  private drawControl?: L.Control.Draw; // <-- Make drawControl a class property 
 
-public drawingsGeoJson: any = null;
- 
+  constructor(private globalService: GlobalService) {} // Inject the service
 
   ngOnInit(): void {
     // Component initialization logic
@@ -87,11 +84,10 @@ public drawingsGeoJson: any = null;
     this.drawnItems = new L.FeatureGroup();
     this.map.addLayer(this.drawnItems);
 
-    // Restore drawings from localStorage if available
-    const savedGeoJson = localStorage.getItem('leafletDrawings');
-    if (savedGeoJson) {
+    // Restore drawings from globalService only (no localStorage)
+    if (this.globalService.globalVar) {
       try {
-        const geoJsonLayer = L.geoJSON(JSON.parse(savedGeoJson));
+        const geoJsonLayer = L.geoJSON(this.globalService.globalVar);
         geoJsonLayer.eachLayer((layer: any) => {
           this.drawnItems.addLayer(layer);
         });
@@ -101,7 +97,6 @@ public drawingsGeoJson: any = null;
     }
 
     const createDrawControl = (enablePolygon: boolean) => {
-      // Remove previous control if exists
       if (this.drawControl) {
         this.map.removeControl(this.drawControl);
       }
@@ -113,26 +108,23 @@ public drawingsGeoJson: any = null;
           marker: false,
           polygon: enablePolygon ? {} : false,
           polyline: false,
-          rectangle: false // <-- Rectangle drawing disabled
+          rectangle: false
         },
         edit: {
           featureGroup: this.drawnItems,
-          remove: false // disables the delete button
+          remove: false
         }
       });
       this.map.addControl(this.drawControl);
     };
 
-    // Initially enable polygon only
     createDrawControl(true);
 
-
-    // Save all drawings to application state
     const saveDrawingsInApp = () => {
-      this.drawingsGeoJson = this.drawnItems.toGeoJSON();
+      const geoJson = this.drawnItems.toGeoJSON();
+      this.globalService.globalVar = geoJson;
     };
 
-    // Handle draw events
     this.map.on(L.Draw.Event.CREATED, (e: any) => {
       const type = e.layerType;
       const layer = e.layer;
@@ -143,12 +135,10 @@ public drawingsGeoJson: any = null;
       } else {
         this.drawnItems.addLayer(layer);
       }
-      
+
       saveDrawingsInApp();
-      this.emitDrawingsChanged();
     });
 
-    // Handle delete events: re-enable drawing if all closed boundaries are removed
     this.map.on(L.Draw.Event.DELETED, () => {
       let hasClosedBoundary = false;
       this.drawnItems.eachLayer((layer: any) => {
@@ -162,44 +152,30 @@ public drawingsGeoJson: any = null;
         createDrawControl(true);
       }
       saveDrawingsInApp();
-      this.emitDrawingsChanged();
     });
 
-    // Also save on edit
     this.map.on(L.Draw.Event.EDITED, () => {
       saveDrawingsInApp();
-      this.emitDrawingsChanged();
     });
   }
 
   public resetDrawings(): void {
-    // Remove all layers from drawnItems
     this.drawnItems.clearLayers();
-    // Remove drawings from localStorage
-    localStorage.removeItem('leafletDrawings');
-    // Clear in-app drawings
-    this.drawingsGeoJson = null;
-    // Re-enable polygon and rectangle drawing
-    if (this.map && this.drawnItems) {
-      this.initializeDrawing();
-    }
+    this.globalService.globalVar = null;
+    // Do NOT call this.initializeDrawing() here
   }
 
   public saveDrawings(): void {
     if (this.drawnItems) {
       const geoJson = this.drawnItems.toGeoJSON();
-      localStorage.setItem('leafletDrawings', JSON.stringify(geoJson));
+      this.globalService.globalVar = geoJson; // Store in service only
     }
   }
 
   // Store drawings in application state (not localStorage)
   public storeDrawingsInApp(): void {
     if (this.drawnItems) {
-      this.drawingsGeoJson = this.drawnItems.toGeoJSON();
+      this.globalService.globalVar = this.drawnItems.toGeoJSON();
     }
-  }
-
-  private emitDrawingsChanged() {
-    this.drawingsChanged.emit(this.drawingsGeoJson);
   }
 }

@@ -1,7 +1,6 @@
 <!-- <app-globe #globe></app-globe> -->
 <app-leaflet-maps
   #leaflet
-  (drawingsChanged)="onDrawingsChanged($event)"
   [lat]="selectedLocation?.lat ?? 39.8283"
   [lon]="selectedLocation?.lng ?? -98.5795"
  >

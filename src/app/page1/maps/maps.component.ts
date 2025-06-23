@@ -1,4 +1,4 @@
-import { Component, Input, ViewChild, Output, EventEmitter } from '@angular/core';
+import { Component, Input, ViewChild } from '@angular/core';
 import { GlobeComponent } from './globe/globe.component';
 import { LeafletMapsComponent } from './leaflet-maps/leaflet-maps.component';
 
@@ -13,8 +13,6 @@ export class MapsComponent {
   @Input() selectedLocation: { lat: number, lng: number } | null = null;
   @ViewChild(GlobeComponent) globeComponent!: GlobeComponent;
   @ViewChild(LeafletMapsComponent) leafletComponent!: LeafletMapsComponent;
-
-  @Output() drawingsChanged = new EventEmitter<any>();
 
   startGlobeRotation(): void {
     if (this.globeComponent) {
@@ -49,10 +47,5 @@ export class MapsComponent {
     if (this.leafletComponent) {
       this.leafletComponent.saveDrawings();
     }
-  }
-
-  // Call this method from the template when (drawingsChanged) is emitted by LeafletMapsComponent
-  public onDrawingsChanged(drawings: any): void {
-    this.drawingsChanged.emit(drawings);
   }
 }

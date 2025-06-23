@@ -6,6 +6,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatIconModule } from '@angular/material/icon';
 import { Location, searchLocations } from '../../../utils/location-utils';
+import { GlobalService } from '../../global.service';
 
 @Component({
   selector: 'app-search-bar',
@@ -14,16 +15,13 @@ import { Location, searchLocations } from '../../../utils/location-utils';
   imports: [MatIconModule, ReactiveFormsModule]
 })
 export class SearchBarComponent implements OnInit, OnDestroy {
+  @Input() site: string = '';
   @Output() locationSelect = new EventEmitter<Location>();
   @Output() resetLocations = new EventEmitter<void>();
   @Output() confirmLocations = new EventEmitter<Location[]>();
   @Output() locationSelected = new EventEmitter<{ lat: number, lng: number }>();
   @Output() startGlobeRotation = new EventEmitter<void>();
   @Output() resetDrawings = new EventEmitter<void>();
-  @Output() saveDrawings = new EventEmitter<void>();
-
-  @Input() drawingsGeoJson: any;
-
 
   searchControl = new FormControl('');
   results: Location[] = [];
@@ -35,13 +33,19 @@ export class SearchBarComponent implements OnInit, OnDestroy {
   
   private destroy$ = new Subject<void>();
 
-  constructor(private snackBar: MatSnackBar) {}
+  constructor(
+    private snackBar: MatSnackBar,
+    public globalService: GlobalService // <-- keep public for template access
+  ) {}
 
   ngOnInit(): void {
     this.checkOnlineStatus();
     this.setupSearchListener();
     window.addEventListener('online', this.updateOnlineStatus);
     window.addEventListener('offline', this.updateOnlineStatus);
+
+    // Access globalVar from GlobalService if needed
+    console.log('Current value in GlobalService:', this.globalService.globalVar);
   }
 
   ngOnDestroy(): void {
@@ -57,7 +61,6 @@ export class SearchBarComponent implements OnInit, OnDestroy {
       this.showOfflineWarning();
     }
   } 
-
 
   private updateOnlineStatus = () => {
     this.isOfflineMode = !navigator.onLine;
@@ -207,16 +210,33 @@ export class SearchBarComponent implements OnInit, OnDestroy {
 
   handleConfirm(): void {
     if (this.selectedLocations.length > 0) {
+      // Save to localStorage with site as key
+      this.saveSiteToLocalStorage(this.site);
+
       this.confirmLocations.emit(this.selectedLocations);
       this.snackBar.open(`Confirmed ${this.selectedLocations.length} location(s) for site boundary`, 'Dismiss', {
         duration: 3000,
       });
-      this.saveDrawings.emit();
     } else {
       this.snackBar.open('Please select at least one location first', 'Dismiss', {
         duration: 2000,
         panelClass: ['error-snackbar']
       });
+    }
+  }
+
+  // Example: Call this when you want to save to localStorage (e.g., after confirming)
+  // site: string is the site name
+  // globalService.globalVar is the value to store
+
+  saveSiteToLocalStorage(site: string) {
+    const value = {
+      site: site,
+      globalVar: this.globalService.globalVar,
+      selectedLocations: this.selectedLocations
+    };
+    if (site && value.globalVar) {
+      localStorage.setItem('siteData', JSON.stringify(value)); // Use static key 'siteData'
     }
   }
 }

@@ -14,7 +14,6 @@
   <div class="search-container">
     <form class="search-form" (submit)="handleSubmit($event)">
       <div class="search-input-group">
-     
         <input
           type="text"
           class="search-input"
@@ -36,18 +35,14 @@
         </button>
       </div>
     </form>
-
     <!-- Search Results Dropdown -->
-   
   </div>
 
   <!-- Location List Section -->
   <div class="location-list-section">
-    
-
     <div class="location-items">
-      <!-- Show message when no locations are selected -->
-      @if (selectedLocations.length === 0 ) {
+      <!-- Show message when no locations are selected and no boundary is drawn -->
+      @if (selectedLocations.length === 0 && !globalService.globalVar) {
         <div class="no-locations-message">
           <mat-icon class="info-icon">info_outline</mat-icon>
           <span>Search and select a location to mark your site boundary</span>
@@ -68,7 +63,7 @@
       }
 
       <!-- Only show one selected location -->
-      @if (selectedLocations.length > 0  ) {
+      @if (selectedLocations.length > 0) {
         <div class="location-item selected">
           <div class="location-name">
             <mat-icon class="location-pin">place</mat-icon>
@@ -79,7 +74,15 @@
               Lat: {{ selectedLocations[0].y.toFixed(6) }}, Lng: {{ selectedLocations[0].x.toFixed(6) }}
             </div>
           }
-          
+        </div>
+      }
+      <!-- Show boundary info if no location but boundary exists -->
+      @if (selectedLocations.length === 0 && globalService.globalVar) {
+        <div class="location-item selected">
+          <div class="location-name">
+            <mat-icon class="location-pin">place</mat-icon>
+            <div class="location-title">Boundary drawn on map</div>
+          </div>
         </div>
       }
     </div>
@@ -87,10 +90,12 @@
 
   <!-- Bottom Action Buttons -->
   <div class="bottom-actions">
-    <button class="reset-button" (click)="handleReset()" [disabled]="selectedLocations.length === 0">
+    <button class="reset-button" (click)="handleReset()" 
+      [disabled]="selectedLocations.length === 0 ">
       Reset
     </button>
-    <button class="confirm-button" (click)="handleConfirm()" [disabled]="selectedLocations.length === 0 && !drawingsGeoJson === null">
+    <button class="confirm-button" (click)="handleConfirm()" 
+      [disabled]="selectedLocations.length === 0 || globalService.globalVar === null">
       Confirm
     </button>
   </div>

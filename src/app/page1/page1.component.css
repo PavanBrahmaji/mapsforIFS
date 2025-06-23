@@ -1,16 +1,23 @@
 .map-container {
   display: flex;
-  gap: 16px;
-  border: 2px solid rgb(165, 162, 162); 
-  border-radius: 2px;
-  height: 500px;
-}.map-container {
-  display: flex;
-  gap: 0;
+  flex-direction: column;
   border: 2px solid #a5a2a2; 
   border-radius: 8px;
   height: 500px;
   overflow: hidden;
+}
+
+.input-group {
+  margin: 12px 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 app-search-bar {
@@ -23,4 +30,31 @@ app-search-bar {
 app-maps {
   flex: 1;
   background-color: #f5f5f5;
+}
+
+/* Style for the input group containing label and input */
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0 16px;
+}
+
+.input-group label {
+  font-weight: 500;
+  color: #333;
+  min-width: 48px;
+}
+
+.input-group input[type="text"] {
+  padding: 4px 10px;
+  border: 1px solid #bdbdbd;
+  border-radius: 4px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-group input[type="text"]:focus {
+  border-color: #1976d2;
 }

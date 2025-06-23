@@ -1,14 +1,22 @@
 <div class="map-container">
-  <app-search-bar
-    (locationSelected)="locationSelect($event)"
-    (startGlobeRotation)="maps.startGlobeRotation()"
-    (resetDrawings)="maps.resetDrawings()"
-    (saveDrawings)="maps.saveDrawings()"
-    [drawingsGeoJson]="drawingsGeoJson">
-  </app-search-bar>
-  <app-maps
-    #maps
-    [selectedLocation]="selectedLocation"
-    (drawingsChanged)="onDrawingsChanged($event)">
-  </app-maps>
+  <!-- Site input field at the top -->
+  <div class="input-group">
+    <label for="site">Site:</label>
+    <input type="text" id="site" name="site" [(ngModel)]="site" placeholder="Enter site name" />
+  </div>
+
+  <div class="map-content">
+    <app-search-bar
+      [site]="site"
+      (locationSelected)="locationSelect($event)"
+      (startGlobeRotation)="maps.startGlobeRotation()"
+      (resetDrawings)="maps.resetDrawings()"
+      (saveDrawings)="maps.saveDrawings()"
+    >
+    </app-search-bar>
+    <app-maps
+      #maps
+      [selectedLocation]="selectedLocation">
+    </app-maps>
+  </div>
 </div>

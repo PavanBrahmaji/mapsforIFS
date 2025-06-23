@@ -4,14 +4,12 @@ import type { FeatureCollection, Feature } from 'geojson';
 import { FormsModule } from '@angular/forms';
 
 @Component({
-  selector: 'app-page2',
+  selector: 'app-page3',
   imports: [FormsModule],
-  templateUrl: './page2.component.html',
-  styleUrl: './page2.component.css'
+  templateUrl: './page3.component.html',
+  styleUrl: './page3.component.css'
 })
-export class Page2Component implements OnInit, AfterViewInit, OnChanges {
-  public building: string = '';
-
+export class Page3Component implements OnInit, AfterViewInit, OnChanges {
   @ViewChild('mapContainer', { static: false }) mapContainer!: ElementRef;
 
   @Input() lat: number = 39.8283;
@@ -50,7 +48,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
 
     this.initializeDrawing();
     this.loadPolygonBoundariesFromLocalStorage();
-    // this.loadMarkerFromLocalStorage(); // <-- REMOVE or COMMENT OUT this line
+    this.loadMarkerFromLocalStorage();
   }
 
   private initializeDrawing(): void {
@@ -66,8 +64,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
         draw: {
           circle: false,
           circlemarker: false,
-          // Disable marker tool if building name is empty
-          marker: (enableMarker && this.building.trim() !== '') ? {} : false,
+          marker: enableMarker ? {} : false,
           polygon: false,
           polyline: false,
           rectangle: false
@@ -81,77 +78,20 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
       this.map.addControl(this.drawControl);
     };
 
+    // Enable marker tool initially if no marker exists
     const hasMarker = this.drawnItems.getLayers().some(l => l instanceof L.Marker);
     createDrawControl(!hasMarker);
-
-    this.map.on(L.Draw.Event.CREATED, (e: any) => {
-      const layer = e.layer;
-      if (layer instanceof L.Marker && this.boundaryPolygonLayer) {
-        const markerLatLng = layer.getLatLng();
-        if (
-          !this.boundaryPolygonLayer.getBounds().contains(markerLatLng) ||
-          !leafletPointInPolygon(markerLatLng, this.boundaryPolygonLayer)
-        ) {
-          alert('Marker must be placed inside the boundary.');
-          return;
-        }
-        // Set tooltip as building name
-        if (this.building && this.building.trim() !== '') {
-          layer.bindTooltip(this.building, { permanent: true, direction: 'top' });
-        }
-        this.makeMarkerDraggable(layer);
-        this.saveMarkerLocationToLocalStorage(layer);
-        this.drawnItems.addLayer(layer);
-        this.saveDrawingsInApp();
-        createDrawControl(false);
-      } else if (!(layer instanceof L.Marker)) {
-        this.drawnItems.addLayer(layer);
-        this.saveDrawingsInApp();
-      }
-    });
   }
 
-  // Optionally, update marker tool enable/disable live as user types:
-  public onBuildingNameChange(): void {
-    const hasMarker = this.drawnItems?.getLayers().some(l => l instanceof L.Marker);
-    this.updateDrawControl(!hasMarker && this.building.trim() !== '');
-  }
-
-  private makeMarkerDraggable(marker: L.Marker): void {
-    marker.options.draggable = true;
-    marker.dragging?.enable();
-
-    marker.on('dragend', (e) => {
-      const draggedMarker = e.target as L.Marker;
-      const newLatLng = draggedMarker.getLatLng();
-
-      if (this.boundaryPolygonLayer) {
-        if (
-          !this.boundaryPolygonLayer.getBounds().contains(newLatLng) ||
-          !leafletPointInPolygon(newLatLng, this.boundaryPolygonLayer)
-        ) {
-          alert('Marker must stay inside the boundary. Moving back to previous position.');
-          const savedMarker = this.getSavedMarkerLocation();
-          if (savedMarker) {
-            draggedMarker.setLatLng([savedMarker.lat, savedMarker.lng]);
-          }
-          return;
-        }
-      }
-
-      this.saveMarkerLocationToLocalStorage(draggedMarker);
-      this.saveDrawingsInApp();
-    });
-  }
-
+  // Load marker for each building from localStorage if it exists
   private loadMarkerFromLocalStorage(): void {
     const savedSiteData = localStorage.getItem('siteData');
     if (savedSiteData && this.boundaryPolygonLayer) {
       try {
         const siteData = JSON.parse(savedSiteData);
-        if (siteData['building']) {
-          for (const buildingName of Object.keys(siteData['building'])) {
-            const markerData = siteData['building'][buildingName];
+        if (siteData.building) {
+          for (const buildingName of Object.keys(siteData.building)) {
+            const markerData = siteData.building[buildingName];
             if (
               markerData &&
               typeof markerData.lat === 'number' &&
@@ -164,7 +104,6 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
               ) {
                 const marker = L.marker([markerData.lat, markerData.lng]);
                 marker.bindTooltip(buildingName, { permanent: true, direction: 'top' });
-                this.makeMarkerDraggable(marker);
                 this.drawnItems.addLayer(marker);
               }
             }
@@ -173,29 +112,12 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
           this.updateDrawControl(false);
         }
       } catch (e) {
-        console.error('Failed to load marker location:', e);
+        console.error('Failed to load building markers:', e);
       }
     }
   }
 
-  private getSavedMarkerLocation(): {lat: number, lng: number} | null {
-    const savedSiteData = localStorage.getItem('siteData');
-    if (savedSiteData) {
-      try {
-        const siteData = JSON.parse(savedSiteData);
-        if (siteData['building'] && this.building && siteData['building'][this.building]) {
-          return {
-            lat: siteData['building'][this.building].lat,
-            lng: siteData['building'][this.building].lng
-          };
-        }
-      } catch (e) {
-        console.error('Failed to parse saved marker location:', e);
-      }
-    }
-    return null;
-  }
-
+  // Load only polygon boundaries from localStorage and add to map
   private loadPolygonBoundariesFromLocalStorage(): void {
     const savedSiteData = localStorage.getItem('siteData');
     if (savedSiteData) {
@@ -235,20 +157,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
-  public resetDrawings(): void {
-    this.drawnItems.clearLayers();
-    localStorage.removeItem('leafletDrawings');
-    this.drawingsGeoJson = null;
-    this.updateDrawControl(true);
-  }
-
-  public saveDrawings(): void {
-    if (this.drawnItems) {
-      const geoJson = this.drawnItems.toGeoJSON();
-      localStorage.setItem('leafletDrawings', JSON.stringify(geoJson));
-    }
-  }
-
+  // Store drawings in application state (not localStorage)
   public saveDrawingsInApp(): void {
     if (this.drawnItems) {
       this.drawingsGeoJson = this.drawnItems.toGeoJSON();
@@ -256,61 +165,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
-  public saveMarkerLocationToLocalStorage(marker: L.Marker): void {
-    const markerLatLng = marker.getLatLng();
-    const savedSiteData = localStorage.getItem('siteData');
-    let siteData: any = {};
-    if (savedSiteData) {
-      try {
-        siteData = JSON.parse(savedSiteData);
-      } catch (e) {
-        siteData = {};
-      }
-    }
-    if (this.building && this.building.trim() !== '') {
-      siteData['building'] = siteData['building'] || {};
-      siteData['building'][this.building] = {
-        lat: markerLatLng.lat,
-        lng: markerLatLng.lng
-      };
-      localStorage.setItem('siteData', JSON.stringify(siteData));
-    } else {
-      alert('Please enter a building name before saving.');
-    }
-  }
-
-  public saveMarkerLocationToLocalStorageFromInput(): void {
-    const markerLayer = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
-    if (markerLayer) {
-      this.saveMarkerLocationToLocalStorage(markerLayer);
-    } else {
-      alert('Please place a marker on the map first.');
-    }
-  }
-
-  public removeMarker(): void {
-    const layers = this.drawnItems.getLayers();
-    layers.forEach(layer => {
-      if (layer instanceof L.Marker) {
-        this.drawnItems.removeLayer(layer);
-      }
-    });
-    const savedSiteData = localStorage.getItem('siteData');
-    if (savedSiteData) {
-      try {
-        const siteData = JSON.parse(savedSiteData);
-        if (siteData['building'] && siteData['building'][this.building]) {
-          delete siteData['building'][this.building];
-          localStorage.setItem('siteData', JSON.stringify(siteData));
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-    this.saveDrawingsInApp();
-    this.updateDrawControl(true);
-  }
-
+  // Helper method to update draw control
   private updateDrawControl(enableMarker: boolean): void {
     if (this.drawControl) {
       this.map.removeControl(this.drawControl);
@@ -332,10 +187,6 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
       }
     });
     this.map.addControl(this.drawControl);
-  }
-
-  public hasMarker(): boolean {
-    return this.drawnItems.getLayers().some(layer => layer instanceof L.Marker);
   }
 
   private emitDrawingsChanged() {

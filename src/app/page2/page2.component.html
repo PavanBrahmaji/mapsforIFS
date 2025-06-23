@@ -1,6 +1,13 @@
 <!-- leaflet-maps.component.html -->
 <div class="leaflet-container">
-  
+
+  <!-- Building name input field -->
+  <div class="input-group" style="margin-bottom: 10px;">
+    <label for="building">Building:</label>
+    <input type="text" id="building" name="building" [(ngModel)]="building" (ngModelChange)="onBuildingNameChange()" placeholder="Enter building name" />
+    <button type="button" (click)="saveMarkerLocationToLocalStorageFromInput()">Save</button>
+  </div>
+
   <div class="map-wrapper">
     <div 
       #mapContainer 
@@ -8,7 +15,5 @@
       class="map-container">
     </div>
   </div>
-  
-
 
 </div>
