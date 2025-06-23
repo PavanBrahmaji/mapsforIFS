@@ -1,7 +1,14 @@
 <div class="map-container">
   <app-search-bar
     (locationSelected)="locationSelect($event)"
-    (startGlobeRotation)="maps.startGlobeRotation()">
+    (startGlobeRotation)="maps.startGlobeRotation()"
+    (resetDrawings)="maps.resetDrawings()"
+    (saveDrawings)="maps.saveDrawings()"
+    [drawingsGeoJson]="drawingsGeoJson">
   </app-search-bar>
-  <app-maps #maps [selectedLocation]="selectedLocation"></app-maps>
+  <app-maps
+    #maps
+    [selectedLocation]="selectedLocation"
+    (drawingsChanged)="onDrawingsChanged($event)">
+  </app-maps>
 </div>

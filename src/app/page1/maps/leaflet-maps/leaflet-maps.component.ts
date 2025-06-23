@@ -1,8 +1,7 @@
-import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, DestroyRef, inject } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, DestroyRef, inject, Input, OnChanges, SimpleChanges, Output, EventEmitter } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
 import 'leaflet-draw';
-import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
 
 // Fix for default markers - Using CDN URLs (simplest solution)
 const iconDefault = L.icon({
@@ -26,43 +25,29 @@ declare module 'leaflet-geosearch' {
 
 @Component({
   selector: 'app-leaflet-maps',
-  imports: [],
+  imports: [CommonModule],
   templateUrl: './leaflet-maps.component.html',
   styleUrl: './leaflet-maps.component.css'
 })
-export class LeafletMapsComponent implements OnInit, AfterViewInit {
+export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
   private destroyRef = inject(DestroyRef);
-  
+
   @ViewChild('mapContainer', { static: false }) mapContainer!: ElementRef;
-  
-  name = "Angular 20 Leaflet Maps";
+
+  @Input() lat: number = 39.8283; // Default: Center latitude for United States
+  @Input() lon: number = -98.5795; // Default: Center longitude for United States
+
+  @Output() drawingsChanged = new EventEmitter<any>();
+
   map!: L.Map;
-  lat: number = 39.8283; // Center latitude for United States
-  lon: number = -98.5795; // Center longitude for United States
   marker!: L.Marker;
   dbMarkers: L.Marker[] = [];
   markers: any[] = [];
   drawnItems!: L.FeatureGroup;
-  
-  // Sample data
-  private readonly myLines = [{
-    "type": "Polygon",
-    "coordinates": [[
-      [105.02517700195314, 19.433801201715198],
-      [106.23367309570314, 18.852796311610007],
-      [105.61843872070314, 7.768472031139744],
-      [105.02517700195314, 19.433801201715198] // Close the polygon
-    ]]
-  }, {
-    "type": "LineString",
-    "coordinates": [[-105, 40], [-110, 45], [-115, 55]]
-  }];
+  private drawControl?: L.Control.Draw; // <-- Make drawControl a class property
 
-  private readonly myStyle = {
-    "color": "green",
-    "weight": 5,
-    "opacity": 0.65
-  };
+public drawingsGeoJson: any = null;
+ 
 
   ngOnInit(): void {
     // Component initialization logic
@@ -72,9 +57,21 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit {
     this.initializeMap();
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (this.map && (changes['lat'] || changes['lon'])) {
+      // Zoom to the new location with a reasonable zoom level (e.g., 14 for city/street)
+      this.map.setView([this.lat, this.lon], 14, { animate: true });
+    }
+  }
+
   private initializeMap(): void {
     // Initialize map centered on the United States with zoom level 4
-    this.map = L.map(this.mapContainer.nativeElement).setView([this.lat, this.lon], 4);
+    this.map = L.map(this.mapContainer.nativeElement, {
+      zoomControl: false // Disable default zoom control (top left)
+    }).setView([this.lat, this.lon], 4);
+
+    // Add zoom control to the bottom right
+    L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 
     // Define base layers
     const baseLayers = {
@@ -118,68 +115,126 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit {
     // this.addSampleData();
 
     // Add search control
-    this.addSearchControl();
+    // this.addSearchControl();
   }
 
   private initializeDrawing(): void {
     this.drawnItems = new L.FeatureGroup();
     this.map.addLayer(this.drawnItems);
 
-    const drawControl = new L.Control.Draw({
-      position: 'topright',
-      draw: {
-        circle: false,
-        circlemarker: false,
-        marker: {
-          icon: iconDefault
-        }
-      },
-      edit: {
-        featureGroup: this.drawnItems
+    // Restore drawings from localStorage if available
+    const savedGeoJson = localStorage.getItem('leafletDrawings');
+    if (savedGeoJson) {
+      try {
+        const geoJsonLayer = L.geoJSON(JSON.parse(savedGeoJson));
+        geoJsonLayer.eachLayer((layer: any) => {
+          this.drawnItems.addLayer(layer);
+        });
+      } catch (e) {
+        console.error('Failed to load saved drawings:', e);
       }
-    });
+    }
 
-    this.map.addControl(drawControl);
+    const createDrawControl = (enablePolygon: boolean) => {
+      // Remove previous control if exists
+      if (this.drawControl) {
+        this.map.removeControl(this.drawControl);
+      }
+      this.drawControl = new L.Control.Draw({
+        position: 'topright',
+        draw: {
+          circle: false,
+          circlemarker: false,
+          marker: false,
+          polygon: enablePolygon ? {} : false,
+          polyline: false,
+          rectangle: false // <-- Rectangle drawing disabled
+        },
+        edit: {
+          featureGroup: this.drawnItems,
+          remove: false // disables the delete button
+        }
+      });
+      this.map.addControl(this.drawControl);
+    };
+
+    // Initially enable polygon only
+    createDrawControl(true);
+
+
+    // Save all drawings to application state
+    const saveDrawingsInApp = () => {
+      this.drawingsGeoJson = this.drawnItems.toGeoJSON();
+    };
 
     // Handle draw events
     this.map.on(L.Draw.Event.CREATED, (e: any) => {
       const type = e.layerType;
       const layer = e.layer;
 
-      if (type === 'marker') {
-        layer.bindPopup('A popup!');
-        console.log('Marker coordinates:', layer.getLatLng());
+      if (type === 'polygon' || type === 'rectangle') {
+        this.drawnItems.addLayer(layer);
+        createDrawControl(false);
       } else {
-        console.log('Shape coordinates:', layer.getLatLngs());
+        this.drawnItems.addLayer(layer);
       }
+      
+      saveDrawingsInApp();
+      this.emitDrawingsChanged();
+    });
 
-      this.drawnItems.addLayer(layer);
+    // Handle delete events: re-enable drawing if all closed boundaries are removed
+    this.map.on(L.Draw.Event.DELETED, () => {
+      let hasClosedBoundary = false;
+      this.drawnItems.eachLayer((layer: any) => {
+        if (
+          layer instanceof L.Polygon && !(layer instanceof L.Polyline && !(layer instanceof L.Polygon))
+        ) {
+          hasClosedBoundary = true;
+        }
+      });
+      if (!hasClosedBoundary) {
+        createDrawControl(true);
+      }
+      saveDrawingsInApp();
+      this.emitDrawingsChanged();
+    });
+
+    // Also save on edit
+    this.map.on(L.Draw.Event.EDITED, () => {
+      saveDrawingsInApp();
+      this.emitDrawingsChanged();
     });
   }
 
-  private addSampleData(): void {
-    const layerPostalcodes = L.geoJSON(this.myLines as any, {
-      style: this.myStyle
-    }).addTo(this.map);
-
-    this.drawnItems.addLayer(layerPostalcodes);
+  public resetDrawings(): void {
+    // Remove all layers from drawnItems
+    this.drawnItems.clearLayers();
+    // Remove drawings from localStorage
+    localStorage.removeItem('leafletDrawings');
+    // Clear in-app drawings
+    this.drawingsGeoJson = null;
+    // Re-enable polygon and rectangle drawing
+    if (this.map && this.drawnItems) {
+      this.initializeDrawing();
+    }
   }
 
-  private addSearchControl(): void {
-    const provider = new OpenStreetMapProvider();
-    const searchControl = new (GeoSearchControl as any)({
-      provider: provider,
-      style: 'bar',
-      autoComplete: true,
-      autoCompleteDelay: 250,
-      showMarker: true,
-      retainZoomLevel: false,
-      animateZoom: true,
-      autoClose: true,
-      searchLabel: 'Enter address',
-      keepResult: true
-    });
+  public saveDrawings(): void {
+    if (this.drawnItems) {
+      const geoJson = this.drawnItems.toGeoJSON();
+      localStorage.setItem('leafletDrawings', JSON.stringify(geoJson));
+    }
+  }
 
-    this.map.addControl(searchControl);
+  // Store drawings in application state (not localStorage)
+  public storeDrawingsInApp(): void {
+    if (this.drawnItems) {
+      this.drawingsGeoJson = this.drawnItems.toGeoJSON();
+    }
+  }
+
+  private emitDrawingsChanged() {
+    this.drawingsChanged.emit(this.drawingsGeoJson);
   }
 }

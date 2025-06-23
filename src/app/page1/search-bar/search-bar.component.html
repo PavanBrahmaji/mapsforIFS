@@ -68,7 +68,7 @@
       }
 
       <!-- Only show one selected location -->
-      @if (selectedLocations.length > 0) {
+      @if (selectedLocations.length > 0  ) {
         <div class="location-item selected">
           <div class="location-name">
             <mat-icon class="location-pin">place</mat-icon>
@@ -79,9 +79,7 @@
               Lat: {{ selectedLocations[0].y.toFixed(6) }}, Lng: {{ selectedLocations[0].x.toFixed(6) }}
             </div>
           }
-          <button class="remove-location-btn" (click)="removeLocation(selectedLocations[0])" type="button">
-            <mat-icon>close</mat-icon>
-          </button>
+          
         </div>
       }
     </div>
@@ -89,10 +87,10 @@
 
   <!-- Bottom Action Buttons -->
   <div class="bottom-actions">
-    <button class="reset-button" (click)="handleReset()" [disabled]="selectedLocations.length === 0">
+    <button class="reset-button" (click)="handleReset()" [disabled]="selectedLocations.length === 0 && !drawingsGeoJson === null">
       Reset
     </button>
-    <button class="confirm-button" (click)="handleConfirm()" [disabled]="selectedLocations.length === 0">
+    <button class="confirm-button" (click)="handleConfirm()" [disabled]="selectedLocations.length === 0 && !drawingsGeoJson === null">
       Confirm
     </button>
   </div>

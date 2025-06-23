@@ -64,6 +64,16 @@
   border-radius: 4px;
 }
 
+.leaflet-bottom.leaflet-control{
+    margin-bottom: 32px !important;
+}
+/* Zoom control position */
+.leaflet-control-zoom.leaflet-bar.leaflet-control {
+  bottom: 60px !important; /* Move up from the bottom (default is 40px) */
+  right: 10px !important;
+  top: auto !important;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .leaflet-container {

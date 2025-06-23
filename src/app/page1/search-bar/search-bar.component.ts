@@ -19,6 +19,11 @@ export class SearchBarComponent implements OnInit, OnDestroy {
   @Output() confirmLocations = new EventEmitter<Location[]>();
   @Output() locationSelected = new EventEmitter<{ lat: number, lng: number }>();
   @Output() startGlobeRotation = new EventEmitter<void>();
+  @Output() resetDrawings = new EventEmitter<void>();
+  @Output() saveDrawings = new EventEmitter<void>();
+
+  @Input() drawingsGeoJson: any;
+
 
   searchControl = new FormControl('');
   results: Location[] = [];
@@ -51,7 +56,8 @@ export class SearchBarComponent implements OnInit, OnDestroy {
     if (this.isOfflineMode) {
       this.showOfflineWarning();
     }
-  }
+  } 
+
 
   private updateOnlineStatus = () => {
     this.isOfflineMode = !navigator.onLine;
@@ -122,15 +128,22 @@ export class SearchBarComponent implements OnInit, OnDestroy {
 
   handleSelect(location: Location): void {
     console.log('Location selected in search component:', location);
-    // Only allow one selection at a time
-    this.selectedLocations = [location];
-    this.selectedLocation = location;
-    this.snackBar.open(`Added: ${location.label}`, 'Dismiss', {
-      duration: 2000,
-    });
-    this.locationSelect.emit(location);
-    this.locationSelected.emit({ lat: location.y, lng: location.x });
-
+    const isAlreadySelected = this.selectedLocations.some(
+      loc => loc.label === location.label || (loc.x === location.x && loc.y === location.y)
+    );
+    if (!isAlreadySelected) {
+      this.selectedLocations.push(location);
+      this.selectedLocation = location;
+      this.snackBar.open(`Added: ${location.label}`, 'Dismiss', {
+        duration: 2000,
+      });
+      this.locationSelect.emit(location);
+      this.locationSelected.emit({ lat: location.y, lng: location.x });
+    } else {
+      this.snackBar.open(`Location already selected: ${location.label}`, 'Dismiss', {
+        duration: 2000,
+      });
+    }
     // Clear search after selection
     this.searchControl.setValue('');
     this.showResults = false;
@@ -185,6 +198,7 @@ export class SearchBarComponent implements OnInit, OnDestroy {
     this.selectedLocation = null;
     this.handleClear();
     this.resetLocations.emit();
+    this.resetDrawings.emit();
     this.snackBar.open('All locations cleared', 'Dismiss', {
       duration: 2000,
     });
@@ -197,6 +211,7 @@ export class SearchBarComponent implements OnInit, OnDestroy {
       this.snackBar.open(`Confirmed ${this.selectedLocations.length} location(s) for site boundary`, 'Dismiss', {
         duration: 3000,
       });
+      this.saveDrawings.emit();
     } else {
       this.snackBar.open('Please select at least one location first', 'Dismiss', {
         duration: 2000,
