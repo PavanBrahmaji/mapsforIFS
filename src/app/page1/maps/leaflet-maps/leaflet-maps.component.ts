@@ -56,7 +56,7 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     if (this.map && (changes['lat'] || changes['lon'])) {
       // Zoom to the new location with a reasonable zoom level (e.g., 14 for city/street)
-      this.map.setView([this.lat, this.lon], 14, { animate: true });
+      this.map.setView([this.lat, this.lon], 17, { animate: true });
     }
   }
 
