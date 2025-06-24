@@ -127,3 +127,15 @@
     height: 300px;
   }
 }
+
+.custom-tooltip {
+  position: absolute;
+  pointer-events: none;
+}
+
+.custom-tooltip .leaflet-tooltip-top::before,
+.custom-tooltip .leaflet-tooltip-bottom::before,
+.custom-tooltip .leaflet-tooltip-left::before,
+.custom-tooltip .leaflet-tooltip-right::before {
+  position: absolute;
+}

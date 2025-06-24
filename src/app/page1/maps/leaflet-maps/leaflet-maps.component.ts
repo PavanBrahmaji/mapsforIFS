@@ -2,7 +2,7 @@ import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, DestroyRef, in
 import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
 import 'leaflet-draw';
-import { GlobalService } from '../../../global.service'; // Add this import
+import { GlobalService } from '../../../global.service'; // Already imported
 
 // Use a red marker icon for all markers
 const iconRed = L.icon({
@@ -32,22 +32,22 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
 
   @ViewChild('mapContainer', { static: false }) mapContainer!: ElementRef;
 
-  @Input() lat: number = 39.8283; // Default: Center latitude for United States
-  @Input() lon: number = -98.5795; // Default: Center longitude for United States
-  @Input() site: string = ''; // Add this if not already present
+  @Input() lat: number = 39.8283;
+  @Input() lon: number = -98.5795;
 
   map!: L.Map;
   marker!: L.Marker;
   dbMarkers: L.Marker[] = [];
   markers: any[] = [];
   drawnItems!: L.FeatureGroup;
-  private drawControl?: L.Control.Draw; // <-- Make drawControl a class property 
-  private originalMarkerPosition?: L.LatLng; // Store original marker position for validation 
+  private drawControl?: L.Control.Draw;
+  private originalMarkerPosition?: L.LatLng;
 
-  constructor(private globalService: GlobalService) {} // Inject the service
+  // Remove any local site variable, always use the global service
+  constructor(private globalService: GlobalService) {}
 
   ngOnInit(): void {
-    // Component initialization logic
+    // No need to set site here, always use this.globalService.site
   }
 
   ngAfterViewInit(): void {
@@ -59,6 +59,8 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       // Zoom to the new location with a reasonable zoom level (e.g., 14 for city/street)
       this.map.setView([this.lat, this.lon], 17, { animate: true });
     }
+        console.log('this.globalService.site',this.globalService.site)
+
   }
 
   private initializeMap(): void {
@@ -203,27 +205,32 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
           }
         }
         this.drawnItems.addLayer(layer);
-        // Tooltip HTML with icon and site name
+        // Use site value from global service
         const tooltipHtml = `
           <div style="
             display: flex;
             align-items: center;
             background: #BD3EF4;
             color: #fff;
-            border-radius: 4px;
-            padding: 6px 12px;
+            border-radius: 4px 4px 4px 0;
+            padding: 4px 16px;
             font-weight: bold;
-            
-          ">
-            <img src="images/site_icon.svg" alt="Site Icon" style="width:20px;height:20px;margin-right:8px;vertical-align:middle;">
+            font-size: 14px;
+            line-height: 100%;
+            letter-spacing: -0.05px;
+            height: 32px;
+            ">
+            <img src="images/site_icon.svg" alt="Site Icon" style="width:24px;height:24px;margin-right:8px;vertical-align:middle;">
             <span style="color:#fff;">${this.site || 'Site'}</span>
           </div>
         `;
         layer.bindTooltip(tooltipHtml, {
-          direction: 'top',
-          permanent: true,
-          sticky: true,
-          className: '' // No custom class needed, all styling is inline
+         permanent: true,
+        direction: 'top',
+        offset: [40, -6],  // Adjust this to position the tooltip precisely
+        sticky: false,     // Set to false for fixed position
+        className: 'custom-tooltip',
+        interactive: false  // No custom class needed, all styling is inline
         }).openTooltip();
         enableOtherTools();
       } else if (type === 'polygon' || type === 'rectangle') {
@@ -239,7 +246,7 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
               opacity: 0.8,
               fillColor: '#CC00EC',
               fillOpacity: 0.07,
-              dashArray: '6, 6'
+              dashArray: '12, 12'
             });
             this.drawnItems.addLayer(layer);
             enableOtherTools();
@@ -347,6 +354,11 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
     if (this.drawnItems) {
       this.globalService.globalVar = this.drawnItems.toGeoJSON();
     }
+  }
+
+  // Always get the latest site value from the global service
+  get site(): string {
+    return this.globalService.site;
   }
 }
 

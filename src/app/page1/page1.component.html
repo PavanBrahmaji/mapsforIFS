@@ -2,7 +2,14 @@
   <!-- Site input field at the top -->
   <div class="input-group">
     <label for="site">Site:</label>
-    <input type="text" id="site" name="site" [(ngModel)]="site" placeholder="Enter site name" />
+    <input
+      type="text"
+      id="site"
+      name="site"
+      [(ngModel)]="site"
+      (ngModelChange)="saveSiteValue()"
+      placeholder="Enter site name"
+    />
   </div>
 
   <div class="map-content">
@@ -16,7 +23,8 @@
     </app-search-bar>
     <app-maps
       #maps
-      [selectedLocation]="selectedLocation">
+      [selectedLocation]="selectedLocation"
+    >
     </app-maps>
   </div>
 </div>

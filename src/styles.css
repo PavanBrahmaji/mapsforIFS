@@ -10,3 +10,14 @@ body {
   margin: 0;
   font-family: 'Roboto', sans-serif;
 }
+
+.leaflet-tooltip {
+    padding: 0px !important;
+    background-color: #fff !important;
+    border: none !important;
+}
+
+
+.leaflet-tooltip-top:before{
+    border: none !important;
+}

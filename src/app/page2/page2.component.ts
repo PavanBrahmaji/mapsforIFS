@@ -4,15 +4,13 @@ import type { FeatureCollection, Feature } from 'geojson';
 import { FormsModule } from '@angular/forms';
 
 const redIcon = L.icon({
- iconUrl: 'images/marker.svg',
+  iconUrl: 'images/marker.svg',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   tooltipAnchor: [16, -28]
 });
 L.Marker.prototype.options.icon = redIcon;
-
-
 
 @Component({
   selector: 'app-page2',
@@ -61,7 +59,6 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
 
     this.initializeDrawing();
     this.loadPolygonBoundariesFromLocalStorage();
-    // this.loadMarkerFromLocalStorage(); // <-- REMOVE or COMMENT OUT this line
   }
 
   private initializeDrawing(): void {
@@ -77,8 +74,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
         draw: {
           circle: false,
           circlemarker: false,
-          // Disable marker tool if building name is empty
-          marker: (enableMarker && this.building.length> 0 ) ? { icon: redIcon } : false, 
+          marker: (enableMarker && this.building.length > 0) ? { icon: redIcon } : false,
           polygon: false,
           polyline: false,
           rectangle: false
@@ -106,32 +102,37 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
           alert('Marker must be placed inside the boundary.');
           return;
         }
-        // Set marker icon to red
+        
         layer.setIcon(redIcon);
-        // Set tooltip as building name
-        if (this.building && this.building.trim() !== '') {
-          const tooltipHtml = `
+       if (this.building && this.building.trim() !== '') {
+        const tooltipHtml = `
           <span style="
             display: flex;
             align-items: center;
             background: #303030;
             color: #fff;
-            padding: 5px 10px ;
+            border-radius: 4px 4px 4px 0;
+            padding: 4px 16px;
             font-weight: bold;
-            margin:-10px;
-            border-radius: 5px;
+            font-size: 14px;
+            line-height: 100%;
+            letter-spacing: -0.05px;
+            height: 32px;
+
           ">
-            <img src="images/building_icon.svg" alt="Site Icon" style="vertical-align:middle;margin:10px;">
+            <img src="images/building_icon.svg" alt="Site Icon" style="width:24px;height:24px;margin-right:8px;vertical-align:middle;">
             <span style="color:#fff;">${this.building || 'Building'}</span>
           </span>
-          `;
-          layer.bindTooltip(tooltipHtml, {
-            permanent: true,
-            direction: 'top',
-            sticky: true,
-            className: ''
-          }).openTooltip();
-        }
+        `;
+        layer.bindTooltip(tooltipHtml, {
+                  permanent: true,
+                  direction: 'top',
+                  offset: [55, -6],  // Adjust this to position the tooltip precisely
+                  sticky: false,     // Set to false for fixed position
+                  className: 'custom-tooltip',
+                  interactive: false // Set to false if you don't want interaction with the tooltip
+                }).openTooltip();
+      }
         this.makeMarkerDraggable(layer);
         this.saveMarkerLocationToLocalStorage(layer);
         this.drawnItems.addLayer(layer);
@@ -144,42 +145,74 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     });
   }
 
-  // Optionally, update marker tool enable/disable live as user types:
-  public onBuildingNameChange(): void {
+  public onBuildingChange(): void {
     const hasMarker = this.drawnItems?.getLayers().some(l => l instanceof L.Marker);
     this.updateDrawControl(!hasMarker && this.building.trim() !== '');
+
+    const markerLayer = this.drawnItems?.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
+    if (markerLayer) {
+      const tooltipHtml = `
+        <span style="
+          display: flex;
+          align-items: center;
+          background: #303030;
+          color: #fff;
+          border-radius: 4px 4px 4px 0;
+          padding: 4px 16px;
+          font-weight: bold;
+          font-size: 14px;
+          line-height: 100%;
+          letter-spacing: -0.05px;
+          height: 32px;
+        ">
+          <img src="images/building_icon.svg" alt="Site Icon" style="vertical-align:middle;margin:10px;">
+          <span style="color:#fff;">${this.building || 'Building'}</span>
+        </span>
+      `;
+      markerLayer.unbindTooltip();
+      markerLayer.bindTooltip(tooltipHtml, {
+        permanent: true,
+        direction: 'top',
+        offset: [60, -6],  // Adjust this to position the tooltip precisely
+        sticky: false,     // Set to false for fixed position
+        className: 'custom-tooltip',
+        interactive: false // Set to false if you don't want interaction with the tooltip
+      }).openTooltip();
+    }
   }
 
   private makeMarkerDraggable(marker: L.Marker): void {
-    marker.setIcon(redIcon); // Always set the icon to red
+    marker.setIcon(redIcon);
     marker.options.draggable = true;
     marker.dragging?.enable();
 
-    marker.on('dragend', (e) => {
-      const draggedMarker = e.target as L.Marker;
-      const newLatLng = draggedMarker.getLatLng();
+    marker
+      .on('dragstart', () => {
+        marker.setIcon(redIcon);
+      })
+      .on('dragend', (e) => {
+        const draggedMarker = e.target as L.Marker;
+        const newLatLng = draggedMarker.getLatLng();
 
-      if (this.boundaryPolygonLayer) {
-        if (
-          !this.boundaryPolygonLayer.getBounds().contains(newLatLng) ||
-          !leafletPointInPolygon(newLatLng, this.boundaryPolygonLayer)
-        ) {
-          alert('Marker must stay inside the boundary. Moving back to previous position.');
-          const savedMarker = this.getSavedMarkerLocation();
-          if (savedMarker) {
-            draggedMarker.setLatLng([savedMarker.lat, savedMarker.lng]);
+        if (this.boundaryPolygonLayer) {
+          if (
+            !this.boundaryPolygonLayer.getBounds().contains(newLatLng) ||
+            !leafletPointInPolygon(newLatLng, this.boundaryPolygonLayer)
+          ) {
+            alert('Marker must stay inside the boundary. Moving back to previous position.');
+            const savedMarker = this.getSavedMarkerLocation();
+            if (savedMarker) {
+              draggedMarker.setLatLng([savedMarker.lat, savedMarker.lng]);
+            }
+            return;
           }
-          return;
         }
-      }
 
-      draggedMarker.setIcon(redIcon); // Ensure icon stays red after drag
-      this.saveMarkerLocationToLocalStorage(draggedMarker);
-      this.saveDrawingsInApp();
-    });
+        draggedMarker.setIcon(redIcon);
+        this.saveMarkerLocationToLocalStorage(draggedMarker);
+        this.saveDrawingsInApp();
+      });
   }
-
-
 
   private getSavedMarkerLocation(): {lat: number, lng: number} | null {
     const savedSiteData = localStorage.getItem('siteData');
@@ -218,8 +251,8 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
             color: '#CC00EC',
             opacity: 0.8,
             fillColor: '#CC00EC',
-            fillOpacity: 0.07, // 7% fill opacity
-            dashArray: '12, 12' // Dotted line with increased space between dashes
+            fillOpacity: 0.07,
+            dashArray: '12, 12'
           })
         });
         geoJsonLayer.eachLayer((layer: any) => {
@@ -290,7 +323,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
-  public saveMarkerLocationToLocalStorageFromInput(): void {
+  public saveLocation(): void {
     const markerLayer = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
     if (markerLayer) {
       this.saveMarkerLocationToLocalStorage(markerLayer);
@@ -331,7 +364,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
       draw: {
         circle: false,
         circlemarker: false,
-        marker: enableMarker ? {} : false,
+        marker: enableMarker ? { icon: redIcon } : false,
         polygon: false,
         polyline: false,
         rectangle: false
@@ -354,7 +387,6 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
   }
 }
 
-// Point-in-polygon helper
 function leafletPointInPolygon(latlng: L.LatLng, polygon: L.Polygon): boolean {
   const poly = polygon.getLatLngs()[0] as L.LatLng[];
   let inside = false;

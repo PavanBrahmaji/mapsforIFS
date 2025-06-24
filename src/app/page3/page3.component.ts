@@ -91,7 +91,6 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
     createDrawControl(!hasMarker);
   }
 
-  // Load marker for each building from localStorage if it exists
   private loadMarkerFromLocalStorage(): void {
     const savedSiteData = localStorage.getItem('siteData');
     if (savedSiteData && this.boundaryPolygonLayer) {
@@ -111,7 +110,35 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
                 leafletPointInPolygon(markerLatLng, this.boundaryPolygonLayer)
               ) {
                 const marker = L.marker([markerData.lat, markerData.lng], { icon: redIcon });
-                marker.bindTooltip(buildingName, { permanent: true, direction: 'top' });
+                
+                const tooltipHtml = `
+                  <span style="
+                    display: flex;
+                    align-items: center;
+                    background: #303030;
+                    color: #fff;
+                    border-radius: 4px 4px 4px 0;
+                    padding: 4px 16px;
+                    font-weight: bold;
+                    font-size: 14px;
+                    line-height: 100%;
+                    letter-spacing: -0.05px;
+                    height: 32px;
+                  ">
+                    <img src="images/building_icon.svg" alt="Site Icon" style="width:24px;height:24px;margin-right:8px;vertical-align:middle;">
+                    <span style="color:#fff;">${buildingName || 'Building'}</span>
+                  </span>
+                `;
+                
+                marker.bindTooltip(tooltipHtml, {
+                  permanent: true,
+                  direction: 'top',
+                  offset: [60, -6],  // Adjust this to position the tooltip precisely
+                  sticky: false,     // Set to false for fixed position
+                  className: 'custom-tooltip',
+                  interactive: false // Set to false if you don't want interaction with the tooltip
+                }).openTooltip();
+                
                 this.drawnItems.addLayer(marker);
               }
             }
@@ -125,7 +152,6 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
-  // Load only polygon boundaries from localStorage and add to map
   private loadPolygonBoundariesFromLocalStorage(): void {
     const savedSiteData = localStorage.getItem('siteData');
     if (savedSiteData) {
@@ -145,8 +171,8 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
             color: '#CC00EC',
             opacity: 0.8,
             fillColor: '#CC00EC',
-            fillOpacity: 0.07, // 7% fill opacity
-            dashArray: '12, 12' // Dotted line with increased space between dashes
+            fillOpacity: 0.07,
+            dashArray: '12, 12'
           }
         });
         geoJsonLayer.eachLayer((layer: any) => {
@@ -173,7 +199,6 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
-  // Store drawings in application state (not localStorage)
   public saveDrawingsInApp(): void {
     if (this.drawnItems) {
       this.drawingsGeoJson = this.drawnItems.toGeoJSON();
@@ -181,7 +206,6 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
-  // Helper method to update draw control
   private updateDrawControl(enableMarker: boolean): void {
     if (this.drawControl) {
       this.map.removeControl(this.drawControl);
@@ -210,7 +234,6 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
   }
 }
 
-// Point-in-polygon helper
 function leafletPointInPolygon(latlng: L.LatLng, polygon: L.Polygon): boolean {
   const poly = polygon.getLatLngs()[0] as L.LatLng[];
   let inside = false;
