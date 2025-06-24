@@ -1,5 +1,16 @@
 import { Component, ViewChild, ElementRef, Input, Output, EventEmitter, OnInit, AfterViewInit, OnChanges, SimpleChanges } from '@angular/core';
 import * as L from 'leaflet';
+
+const redIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  tooltipAnchor: [16, -28],
+  shadowSize: [41, 41]
+});
+
 import type { FeatureCollection, Feature } from 'geojson';
 import { FormsModule } from '@angular/forms';
 
@@ -95,9 +106,12 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
           alert('Marker must be placed inside the boundary.');
           return;
         }
+        // Set marker icon to red
+        layer.setIcon(redIcon);
         // Set tooltip as building name
         if (this.building && this.building.trim() !== '') {
           layer.bindTooltip(this.building, { permanent: true, direction: 'top' });
+          layer.openTooltip();
         }
         this.makeMarkerDraggable(layer);
         this.saveMarkerLocationToLocalStorage(layer);
@@ -118,6 +132,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
   }
 
   private makeMarkerDraggable(marker: L.Marker): void {
+    marker.setIcon(redIcon); // Always set the icon to red
     marker.options.draggable = true;
     marker.dragging?.enable();
 
@@ -139,6 +154,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
         }
       }
 
+      draggedMarker.setIcon(redIcon); // Ensure icon stays red after drag
       this.saveMarkerLocationToLocalStorage(draggedMarker);
       this.saveDrawingsInApp();
     });

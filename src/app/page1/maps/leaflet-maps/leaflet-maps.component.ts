@@ -4,10 +4,10 @@ import * as L from 'leaflet';
 import 'leaflet-draw';
 import { GlobalService } from '../../../global.service'; // Add this import
 
-// Fix for default markers - Using CDN URLs (simplest solution)
-const iconDefault = L.icon({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+// Use a red marker icon for all markers
+const iconRed = L.icon({
+  iconRetinaUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -15,7 +15,7 @@ const iconDefault = L.icon({
   tooltipAnchor: [16, -28],
   shadowSize: [41, 41]
 });
-L.Marker.prototype.options.icon = iconDefault;
+L.Marker.prototype.options.icon = iconRed;
 
 declare module 'leaflet-geosearch' {
   interface GeoSearchControl {

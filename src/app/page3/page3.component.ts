@@ -3,6 +3,16 @@ import * as L from 'leaflet';
 import type { FeatureCollection, Feature } from 'geojson';
 import { FormsModule } from '@angular/forms';
 
+const redIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  tooltipAnchor: [16, -28],
+  shadowSize: [41, 41]
+});
+
 @Component({
   selector: 'app-page3',
   imports: [FormsModule],
@@ -102,7 +112,7 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
                 this.boundaryPolygonLayer.getBounds().contains(markerLatLng) &&
                 leafletPointInPolygon(markerLatLng, this.boundaryPolygonLayer)
               ) {
-                const marker = L.marker([markerData.lat, markerData.lng]);
+                const marker = L.marker([markerData.lat, markerData.lng], { icon: redIcon });
                 marker.bindTooltip(buildingName, { permanent: true, direction: 'top' });
                 this.drawnItems.addLayer(marker);
               }
