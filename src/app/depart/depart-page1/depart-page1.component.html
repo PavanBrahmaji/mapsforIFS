@@ -1,0 +1,20 @@
+<div class="leaflet-container">
+
+
+    
+
+  <!-- Department input field -->
+  <div class="input-group" style="margin-bottom: 10px;">
+    <label for="department">Department:</label>
+    <input type="text" id="department" name="department" [(ngModel)]="site" placeholder="Enter department" />
+  </div>
+
+  <div class="map-wrapper">
+    <div 
+      #mapContainer 
+      id="map" 
+      class="map-container">
+    </div>
+  </div>
+
+</div>

@@ -4,13 +4,11 @@ import type { FeatureCollection, Feature } from 'geojson';
 import { FormsModule } from '@angular/forms';
 
 const redIcon = L.icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconUrl: 'images/marker.svg', // Use your local SVG marker
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  tooltipAnchor: [16, -28],
-  shadowSize: [41, 41]
+  tooltipAnchor: [16, -28]
 });
 
 @Component({
@@ -142,7 +140,15 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
           features: polygonFeatures as Feature[]
         };
         this.drawingsGeoJson = polygonsGeoJson;
-        const geoJsonLayer = L.geoJSON(polygonsGeoJson);
+        const geoJsonLayer = L.geoJSON(polygonsGeoJson, {
+          style: {
+            color: '#CC00EC',
+            opacity: 0.8,
+            fillColor: '#CC00EC',
+            fillOpacity: 0.07, // 7% fill opacity
+            dashArray: '12, 12' // Dotted line with increased space between dashes
+          }
+        });
         geoJsonLayer.eachLayer((layer: any) => {
           this.drawnItems.addLayer(layer);
           if (!this.boundaryPolygonLayer && layer instanceof L.Polygon) {
