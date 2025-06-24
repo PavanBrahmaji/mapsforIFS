@@ -6,7 +6,7 @@ import { GlobalService } from '../../../global.service'; // Add this import
 
 // Use a red marker icon for all markers
 const iconRed = L.icon({
-  iconUrl: 'images/marker.svg', // Use your local SVG marker
+  iconUrl: 'images/site_marker.svg', // Use your local SVG marker
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -109,20 +109,31 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       if (this.drawControl) {
         this.map.removeControl(this.drawControl);
       }
+      // Disable polygon tool if a polygon already exists or if there is no marker
+      const polygonExists = this.drawnItems.getLayers().some(l => l instanceof L.Polygon);
+      const markerExists = this.drawnItems.getLayers().some(l => l instanceof L.Marker);
+
       this.drawControl = new L.Control.Draw({
         position: 'topright',
         draw: {
           circle: false,
           circlemarker: false,
-          marker: enableMarker ? {} : false,
-          polygon: false,
+          marker: enableMarker ? { icon: iconRed } : false,
+          polygon: (!markerExists || polygonExists) ? false : {
+            shapeOptions: {
+              color: '#CC00EC',
+              opacity: 0.8,
+              fillColor: '#CC00EC',
+              fillOpacity: 0.07
+            }
+          },
           polyline: false,
           rectangle: false
         },
         edit: {
           featureGroup: this.drawnItems,
           remove: false,
-          edit: enableEdit ? {} : false // <-- Fix: Use object or false instead of boolean
+          edit: enableEdit ? {} : false
         }
       });
       this.map.addControl(this.drawControl);
@@ -141,14 +152,17 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       const enableEdit = hasMarker() && hasPolygon();
       if (this.drawControl) {
         this.map.removeControl(this.drawControl);
+        
       }
+      const polygonExists = this.drawnItems.getLayers().some(l => l instanceof L.Polygon);
+      const markerExists = this.drawnItems.getLayers().some(l => l instanceof L.Marker);
       this.drawControl = new L.Control.Draw({
         position: 'topright',
         draw: {
           circle: false,
           circlemarker: false,
           marker: false,
-          polygon: {
+          polygon: (!markerExists || polygonExists) ? false : {
             shapeOptions: {
               color: '#CC00EC',
               opacity: 0.8,
@@ -178,8 +192,39 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       const layer = e.layer;
 
       if (type === 'marker') {
+        // Check if a polygon exists
+        const polygonLayer = this.drawnItems.getLayers().find(l => l instanceof L.Polygon) as L.Polygon | undefined;
+        if (polygonLayer) {
+          // If a polygon exists, only allow marker if inside the polygon
+          const markerLatLng = layer.getLatLng();
+          if (!leafletPointInPolygon(markerLatLng, polygonLayer)) {
+            alert('Marker must be placed inside the boundary.');
+            return; // Do not add the marker
+          }
+        }
         this.drawnItems.addLayer(layer);
-        // After marker is placed, enable other tools and update edit button
+        // Tooltip HTML with icon and site name
+        const tooltipHtml = `
+          <div style="
+            display: flex;
+            align-items: center;
+            background: #BD3EF4;
+            color: #fff;
+            border-radius: 4px;
+            padding: 6px 12px;
+            font-weight: bold;
+            
+          ">
+            <img src="images/site_icon.svg" alt="Site Icon" style="width:20px;height:20px;margin-right:8px;vertical-align:middle;">
+            <span style="color:#fff;">${this.site || 'Site'}</span>
+          </div>
+        `;
+        layer.bindTooltip(tooltipHtml, {
+          direction: 'top',
+          permanent: true,
+          sticky: true,
+          className: '' // No custom class needed, all styling is inline
+        }).openTooltip();
         enableOtherTools();
       } else if (type === 'polygon' || type === 'rectangle') {
         // Check if a marker exists and is inside the new polygon
@@ -245,14 +290,41 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       
       if (isValid) {
         saveDrawingsInApp();
+        // If there is no marker after editing, enable marker tool so user can add a new marker
+        const hasMarker = this.drawnItems.getLayers().some(l => l instanceof L.Marker);
+        const hasPolygon = this.drawnItems.getLayers().some(l => l instanceof L.Polygon);
+        if (!hasMarker && hasPolygon) {
+          createDrawControl(true, true); // Enable marker tool and edit
+        }
       }
     });
 
-    // Store original marker position before editing starts
+    // Add this before the EDITSTART event handler inside initializeDrawing():
     this.map.on(L.Draw.Event.EDITSTART, () => {
+      // Check if both marker and polygon exist
       const markerLayer = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
-      if (markerLayer) {
-        this.originalMarkerPosition = markerLayer.getLatLng();
+      const polygonLayer = this.drawnItems.getLayers().find(l => l instanceof L.Polygon) as L.Polygon | undefined;
+
+      if (markerLayer && polygonLayer) {
+        const proceed = confirm(
+          'Warning: If you edit the boundary, the marker will be removed. You will need to add a new marker inside the boundary after saving. Continue?'
+        );
+        if (!proceed) {
+          // Cancel editing mode
+          this.map.fire('draw:editstop');
+          return;
+        } else {
+          // Remove the marker if user clicks OK
+          this.drawnItems.removeLayer(markerLayer);
+          // DO NOT call createDrawControl here!
+          // Let the user finish editing and click Save/Cancel
+        }
+      }
+
+      // Store original marker position before editing starts (if marker still exists)
+      const markerAfterRemoval = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
+      if (markerAfterRemoval) {
+        this.originalMarkerPosition = markerAfterRemoval.getLatLng();
       }
     });
   }

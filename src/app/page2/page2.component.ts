@@ -1,17 +1,18 @@
 import { Component, ViewChild, ElementRef, Input, Output, EventEmitter, OnInit, AfterViewInit, OnChanges, SimpleChanges } from '@angular/core';
 import * as L from 'leaflet';
+import type { FeatureCollection, Feature } from 'geojson';
+import { FormsModule } from '@angular/forms';
 
 const redIcon = L.icon({
- iconUrl: 'images/marker.svg', // Use your local SVG marker
- 
+ iconUrl: 'images/marker.svg',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   tooltipAnchor: [16, -28]
 });
+L.Marker.prototype.options.icon = redIcon;
 
-import type { FeatureCollection, Feature } from 'geojson';
-import { FormsModule } from '@angular/forms';
+
 
 @Component({
   selector: 'app-page2',
@@ -77,7 +78,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
           circle: false,
           circlemarker: false,
           // Disable marker tool if building name is empty
-          marker: (enableMarker && this.building.trim() !== '') ? {} : false,
+          marker: (enableMarker && this.building.length> 0 ) ? { icon: redIcon } : false, 
           polygon: false,
           polyline: false,
           rectangle: false
@@ -109,8 +110,27 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
         layer.setIcon(redIcon);
         // Set tooltip as building name
         if (this.building && this.building.trim() !== '') {
-          layer.bindTooltip(this.building, { permanent: true, direction: 'top' });
-          layer.openTooltip();
+          const tooltipHtml = `
+          <span style="
+            display: flex;
+            align-items: center;
+            background: #303030;
+            color: #fff;
+            padding: 5px 10px ;
+            font-weight: bold;
+            margin:-10px;
+            border-radius: 5px;
+          ">
+            <img src="images/building_icon.svg" alt="Site Icon" style="vertical-align:middle;margin:10px;">
+            <span style="color:#fff;">${this.building || 'Building'}</span>
+          </span>
+          `;
+          layer.bindTooltip(tooltipHtml, {
+            permanent: true,
+            direction: 'top',
+            sticky: true,
+            className: ''
+          }).openTooltip();
         }
         this.makeMarkerDraggable(layer);
         this.saveMarkerLocationToLocalStorage(layer);
@@ -159,39 +179,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     });
   }
 
-  private loadMarkerFromLocalStorage(): void {
-    const savedSiteData = localStorage.getItem('siteData');
-    if (savedSiteData && this.boundaryPolygonLayer) {
-      try {
-        const siteData = JSON.parse(savedSiteData);
-        if (siteData['building']) {
-          for (const buildingName of Object.keys(siteData['building'])) {
-            const markerData = siteData['building'][buildingName];
-            if (
-              markerData &&
-              typeof markerData.lat === 'number' &&
-              typeof markerData.lng === 'number'
-            ) {
-              const markerLatLng = L.latLng(markerData.lat, markerData.lng);
-              if (
-                this.boundaryPolygonLayer.getBounds().contains(markerLatLng) &&
-                leafletPointInPolygon(markerLatLng, this.boundaryPolygonLayer)
-              ) {
-                const marker = L.marker([markerData.lat, markerData.lng]);
-                marker.bindTooltip(buildingName, { permanent: true, direction: 'top' });
-                this.makeMarkerDraggable(marker);
-                this.drawnItems.addLayer(marker);
-              }
-            }
-          }
-          this.saveDrawingsInApp();
-          this.updateDrawControl(false);
-        }
-      } catch (e) {
-        console.error('Failed to load marker location:', e);
-      }
-    }
-  }
+
 
   private getSavedMarkerLocation(): {lat: number, lng: number} | null {
     const savedSiteData = localStorage.getItem('siteData');

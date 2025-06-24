@@ -90,3 +90,17 @@
     height: 300px;
   }
 }
+
+
+
+/* Set the tooltip arrow color to match the background */
+.leaflet-tooltip-top:before {
+  border-top-color: #BD3EF4 !important;
+}
+
+/* Remove unnecessary overrides */
+.leaflet-tooltip.leaflet-zoom-animated.leaflet-tooltip-top {
+  padding: 0 !important;
+  border: none !important;
+  background-color: transparent !important;
+}
