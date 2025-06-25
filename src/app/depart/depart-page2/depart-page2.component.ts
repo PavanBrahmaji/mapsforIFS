@@ -67,31 +67,14 @@ export class DepartPage2Component implements AfterViewInit {
       // Create and add the marker to the map
       const marker = L.marker([markerData.lat, markerData.lng], { icon: redIcon });
       
-      const tooltipHtml = `
-        <span style="
-          display: flex;
-          align-items: center;
-          background: #303030;
-          color: #fff;
-          border-radius: 4px 4px 4px 0;
-          padding: 4px 16px;
-          font-weight: bold;
-          font-size: 14px;
-          line-height: 100%;
-          letter-spacing: -0.05px;
-          height: 32px;
-        ">
-          <img src="images/building_icon.svg" alt="Department Icon" style="width:24px;height:24px;margin-right:8px;">
-          <span style="color:#fff;">${markerData.label || 'Department Location'}</span>
-        </span>
-      `;
       
-      marker.bindTooltip(tooltipHtml, {
-        permanent: true,
-        direction: 'top',
-        offset: [60, -6],
-        className: 'custom-tooltip'
-      }).openTooltip();
+      
+      marker.bindTooltip(`<div >${markerData.label}</div>`, {
+          permanent: true,
+          direction: 'top',
+          className: 'custom-tooltip-dept',
+          interactive: false
+        })
       
       this.drawnItems.addLayer(marker);
 

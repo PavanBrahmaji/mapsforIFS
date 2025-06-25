@@ -13,11 +13,20 @@ body {
 
 .leaflet-tooltip {
     padding: 0px !important;
-    background-color: #fff !important;
+    background-color: transparent !important;
     border: none !important;
 }
 
 
 .leaflet-tooltip-top:before{
     border: none !important;
+}
+
+
+.leaflet-tooltip.custom-tooltip-dept {
+    box-shadow: none;
+    color: red;
+    font-weight: bold;
+    /* text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white; */
+    filter: drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);
 }
