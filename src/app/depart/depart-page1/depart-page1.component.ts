@@ -239,8 +239,13 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
     if (location.x && location.y) {
       this.selectedLocationMarker = L.marker([location.y, location.x], { icon: redIcon })
         .addTo(this.map)
-        .bindPopup(`<strong>${location.label}</strong>`)
-        .openPopup();
+        .bindTooltip(`<div >${location.label}</div>`, {
+          permanent: true,
+          direction: 'top',
+          className: 'custom-tooltip-dept',
+          interactive: false
+        })
+        .openTooltip();
 
       this.selectedLocationMarker.options.draggable = true;
       this.selectedLocationMarker.dragging?.enable();
@@ -360,7 +365,9 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
     if (this.markerLabel.trim()) {
       marker.bindTooltip(this.markerLabel, { 
         permanent: true, 
-        direction: 'top' 
+        direction: 'top',
+        className: 'custom-tooltip',
+        interactive: false
       }).openTooltip();
     }
     

@@ -303,7 +303,7 @@
 .location-pin {
   color: #3b82f6;
   font-size: 18px;
-  width: 18px;
+  width: 30px;
   height: 18px;
 }
 
@@ -480,4 +480,16 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.custom-tooltip {
+  background: #303030;
+  color: white;
+  border: none;
+  box-shadow: none;
+  font-weight: bold;
+}
+
+.custom-tooltip::before {
+  border-top-color: #303030;
 }
