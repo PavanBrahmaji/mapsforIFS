@@ -20,6 +20,7 @@ L.Marker.prototype.options.icon = redIcon;
 })
 export class Page2Component implements OnInit, AfterViewInit, OnChanges {
   public building: string = '';
+  private lastValidMarkerPosition: L.LatLng | null = null;
 
   @ViewChild('mapContainer', { static: false }) mapContainer!: ElementRef;
 
@@ -33,6 +34,7 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
   private drawControl?: L.Control.Draw;
   public drawingsGeoJson: any = null;
   private boundaryPolygonLayer?: L.Polygon;
+  private boundaryWarning?: HTMLElement;
 
   ngOnInit(): void {}
 
@@ -93,51 +95,8 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
 
     this.map.on(L.Draw.Event.CREATED, (e: any) => {
       const layer = e.layer;
-      if (layer instanceof L.Marker && this.boundaryPolygonLayer) {
-        const markerLatLng = layer.getLatLng();
-        if (
-          !this.boundaryPolygonLayer.getBounds().contains(markerLatLng) ||
-          !leafletPointInPolygon(markerLatLng, this.boundaryPolygonLayer)
-        ) {
-          alert('Marker must be placed inside the boundary.');
-          return;
-        }
-        
-        layer.setIcon(redIcon);
-       if (this.building && this.building.trim() !== '') {
-        const tooltipHtml = `
-          <span style="
-            display: flex;
-            align-items: center;
-            background: #303030;
-            color: #fff;
-            border-radius: 4px 4px 4px 0;
-            padding: 4px 16px;
-            font-weight: bold;
-            font-size: 14px;
-            line-height: 100%;
-            letter-spacing: -0.05px;
-            height: 32px;
-
-          ">
-            <img src="images/building_icon.svg" alt="Site Icon" style="width:24px;height:24px;margin-right:8px;vertical-align:middle;">
-            <span style="color:#fff;">${this.building || 'Building'}</span>
-          </span>
-        `;
-        layer.bindTooltip(tooltipHtml, {
-                  permanent: true,
-                  direction: 'top',
-                  offset: [55, -6],  // Adjust this to position the tooltip precisely
-                  sticky: false,     // Set to false for fixed position
-                  className: 'custom-tooltip',
-                  interactive: false // Set to false if you don't want interaction with the tooltip
-                }).openTooltip();
-      }
-        this.makeMarkerDraggable(layer);
-        this.saveMarkerLocationToLocalStorage(layer);
-        this.drawnItems.addLayer(layer);
-        this.saveDrawingsInApp();
-        createDrawControl(false);
+      if (layer instanceof L.Marker) {
+        this.handleMarkerCreation(layer, createDrawControl);
       } else if (!(layer instanceof L.Marker)) {
         this.drawnItems.addLayer(layer);
         this.saveDrawingsInApp();
@@ -145,40 +104,65 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     });
   }
 
-  public onBuildingChange(): void {
-    const hasMarker = this.drawnItems?.getLayers().some(l => l instanceof L.Marker);
-    this.updateDrawControl(!hasMarker && this.building.trim() !== '');
+  private handleMarkerCreation(marker: L.Marker, createDrawControl: (enable: boolean) => void): void {
+    if (this.boundaryPolygonLayer) {
+      const markerLatLng = marker.getLatLng();
+      
+      const isInside = this.boundaryPolygonLayer.getBounds().contains(markerLatLng) && 
+                      leafletPointInPolygon(markerLatLng, this.boundaryPolygonLayer);
+      
+      if (!isInside) {
+        this.showBoundaryWarning('Marker must be placed inside the boundary polygon.');
+        return;
+      }
 
-    const markerLayer = this.drawnItems?.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
-    if (markerLayer) {
-      const tooltipHtml = `
-        <span style="
-          display: flex;
-          align-items: center;
-          background: #303030;
-          color: #fff;
-          border-radius: 4px 4px 4px 0;
-          padding: 4px 16px;
-          font-weight: bold;
-          font-size: 14px;
-          line-height: 100%;
-          letter-spacing: -0.05px;
-          height: 32px;
-        ">
-          <img src="images/building_icon.svg" alt="Site Icon" style="vertical-align:middle;margin:10px;">
-          <span style="color:#fff;">${this.building || 'Building'}</span>
-        </span>
-      `;
-      markerLayer.unbindTooltip();
-      markerLayer.bindTooltip(tooltipHtml, {
+      this.lastValidMarkerPosition = markerLatLng;
+    }
+
+    this.setupMarker(marker);
+    createDrawControl(false);
+  }
+
+  private setupMarker(marker: L.Marker): void {
+    marker.setIcon(redIcon);
+    
+    if (this.building && this.building.trim() !== '') {
+      const tooltipHtml = this.createMarkerTooltipHtml();
+      marker.bindTooltip(tooltipHtml, {
         permanent: true,
         direction: 'top',
-        offset: [60, -6],  // Adjust this to position the tooltip precisely
-        sticky: false,     // Set to false for fixed position
+        offset: [55, -6],
+        sticky: false,
         className: 'custom-tooltip',
-        interactive: false // Set to false if you don't want interaction with the tooltip
+        interactive: false
       }).openTooltip();
     }
+    
+    this.makeMarkerDraggable(marker);
+    this.saveMarkerLocationToLocalStorage(marker);
+    this.drawnItems.addLayer(marker);
+    this.saveDrawingsInApp();
+  }
+
+  private createMarkerTooltipHtml(): string {
+    return `
+      <span style="
+        display: flex;
+        align-items: center;
+        background: #303030;
+        color: #fff;
+        border-radius: 4px 4px 4px 0;
+        padding: 4px 16px;
+        font-weight: bold;
+        font-size: 14px;
+        line-height: 100%;
+        letter-spacing: -0.05px;
+        height: 32px;
+      ">
+        <img src="images/building_icon.svg" alt="Site Icon" style="width:24px;height:24px;margin-right:8px;vertical-align:middle;">
+        <span style="color:#fff;">${this.building || 'Building'}</span>
+      </span>
+    `;
   }
 
   private makeMarkerDraggable(marker: L.Marker): void {
@@ -188,48 +172,158 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
 
     marker
       .on('dragstart', () => {
-        marker.setIcon(redIcon);
+        if (this.lastValidMarkerPosition) {
+          // Store the starting position as the last valid position
+          this.lastValidMarkerPosition = marker.getLatLng();
+        }
+      })
+      .on('drag', (e) => {
+        if (this.boundaryPolygonLayer) {
+          const marker = e.target as L.Marker;
+          const newLatLng = marker.getLatLng();
+          
+          const isInside = this.boundaryPolygonLayer.getBounds().contains(newLatLng) && 
+                          leafletPointInPolygon(newLatLng, this.boundaryPolygonLayer);
+          
+          marker.setOpacity(isInside ? 1 : 0.5);
+        }
       })
       .on('dragend', (e) => {
-        const draggedMarker = e.target as L.Marker;
-        const newLatLng = draggedMarker.getLatLng();
+        const marker = e.target as L.Marker;
+        const newLatLng = marker.getLatLng();
+        marker.setOpacity(1);
 
         if (this.boundaryPolygonLayer) {
-          if (
-            !this.boundaryPolygonLayer.getBounds().contains(newLatLng) ||
-            !leafletPointInPolygon(newLatLng, this.boundaryPolygonLayer)
-          ) {
-            alert('Marker must stay inside the boundary. Moving back to previous position.');
-            const savedMarker = this.getSavedMarkerLocation();
-            if (savedMarker) {
-              draggedMarker.setLatLng([savedMarker.lat, savedMarker.lng]);
+          const isInside = this.boundaryPolygonLayer.getBounds().contains(newLatLng) && 
+                          leafletPointInPolygon(newLatLng, this.boundaryPolygonLayer);
+          
+          if (!isInside) {
+            this.showBoundaryWarning('Marker must stay inside the boundary polygon.');
+            if (this.lastValidMarkerPosition) {
+              marker.setLatLng(this.lastValidMarkerPosition);
             }
             return;
           }
+
+          this.lastValidMarkerPosition = newLatLng;
         }
 
-        draggedMarker.setIcon(redIcon);
-        this.saveMarkerLocationToLocalStorage(draggedMarker);
+        this.saveMarkerLocationToLocalStorage(marker);
         this.saveDrawingsInApp();
       });
   }
 
-  private getSavedMarkerLocation(): {lat: number, lng: number} | null {
+  private showBoundaryWarning(message: string): void {
+    if (this.boundaryWarning) {
+      this.boundaryWarning.remove();
+    }
+
+    this.boundaryWarning = L.DomUtil.create('div', 'boundary-warning');
+    this.boundaryWarning.innerHTML = `
+      <div style="
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #ff4444;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 4px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+        font-size: 14px;
+        animation: fadeIn 0.3s;
+      ">
+        ${message}
+      </div>
+    `;
+    
+    const mapContainer = this.map.getContainer();
+    mapContainer.appendChild(this.boundaryWarning);
+
+    setTimeout(() => {
+      if (this.boundaryWarning) {
+        this.boundaryWarning.style.transition = 'opacity 0.5s';
+        this.boundaryWarning.style.opacity = '0';
+        setTimeout(() => {
+          if (this.boundaryWarning) {
+            this.boundaryWarning.remove();
+            this.boundaryWarning = undefined;
+          }
+        }, 500);
+      }
+    }, 3000);
+  }
+
+  private saveMarkerLocationToLocalStorage(marker: L.Marker): void {
+    const markerLatLng = marker.getLatLng();
     const savedSiteData = localStorage.getItem('siteData');
+    let siteData: any = {};
     if (savedSiteData) {
       try {
-        const siteData = JSON.parse(savedSiteData);
-        if (siteData['building'] && this.building && siteData['building'][this.building]) {
-          return {
-            lat: siteData['building'][this.building].lat,
-            lng: siteData['building'][this.building].lng
-          };
-        }
+        siteData = JSON.parse(savedSiteData);
       } catch (e) {
-        console.error('Failed to parse saved marker location:', e);
+        siteData = {};
       }
     }
-    return null;
+    if (this.building && this.building.trim() !== '') {
+      siteData['building'] = siteData['building'] || {};
+      siteData['building'][this.building] = {
+        lat: markerLatLng.lat,
+        lng: markerLatLng.lng
+      };
+      localStorage.setItem('siteData', JSON.stringify(siteData));
+    } else {
+      this.showBoundaryWarning('Please enter a building name before saving.');
+    }
+  }
+
+  private saveDrawingsInApp(): void {
+    if (this.drawnItems) {
+      this.drawingsGeoJson = this.drawnItems.toGeoJSON();
+      this.emitDrawingsChanged();
+    }
+  }
+
+  public onBuildingChange(): void {
+    const hasMarker = this.drawnItems?.getLayers().some(l => l instanceof L.Marker);
+    this.updateDrawControl(!hasMarker && this.building.trim() !== '');
+
+    const markerLayer = this.drawnItems?.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
+    if (markerLayer) {
+      const tooltipHtml = this.createMarkerTooltipHtml();
+      markerLayer.unbindTooltip();
+      markerLayer.bindTooltip(tooltipHtml, {
+        permanent: true,
+        direction: 'top',
+        offset: [60, -6],
+        sticky: false,
+        interactive: false
+      }).openTooltip();
+    }
+  }
+
+  private updateDrawControl(enableMarker: boolean): void {
+    if (this.drawControl) {
+      this.map.removeControl(this.drawControl);
+    }
+    this.drawControl = new L.Control.Draw({
+      position: 'topright',
+      draw: {
+        circle: false,
+        circlemarker: false,
+        marker: enableMarker ? { icon: redIcon } : false,
+        polygon: false,
+        polyline: false,
+        rectangle: false
+      },
+      edit: {
+        featureGroup: this.drawnItems,
+        edit: false,
+        remove: false
+      }
+    });
+    this.map.addControl(this.drawControl);
   }
 
   private loadPolygonBoundariesFromLocalStorage(): void {
@@ -279,6 +373,10 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
+  private emitDrawingsChanged(): void {
+    this.drawingsChanged.emit(this.drawingsGeoJson);
+  }
+
   public resetDrawings(): void {
     this.drawnItems.clearLayers();
     localStorage.removeItem('leafletDrawings');
@@ -293,42 +391,12 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
-  public saveDrawingsInApp(): void {
-    if (this.drawnItems) {
-      this.drawingsGeoJson = this.drawnItems.toGeoJSON();
-      this.emitDrawingsChanged();
-    }
-  }
-
-  public saveMarkerLocationToLocalStorage(marker: L.Marker): void {
-    const markerLatLng = marker.getLatLng();
-    const savedSiteData = localStorage.getItem('siteData');
-    let siteData: any = {};
-    if (savedSiteData) {
-      try {
-        siteData = JSON.parse(savedSiteData);
-      } catch (e) {
-        siteData = {};
-      }
-    }
-    if (this.building && this.building.trim() !== '') {
-      siteData['building'] = siteData['building'] || {};
-      siteData['building'][this.building] = {
-        lat: markerLatLng.lat,
-        lng: markerLatLng.lng
-      };
-      localStorage.setItem('siteData', JSON.stringify(siteData));
-    } else {
-      alert('Please enter a building name before saving.');
-    }
-  }
-
   public saveLocation(): void {
     const markerLayer = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
     if (markerLayer) {
       this.saveMarkerLocationToLocalStorage(markerLayer);
     } else {
-      alert('Please place a marker on the map first.');
+      this.showBoundaryWarning('Please place a marker on the map first.');
     }
   }
 
@@ -353,37 +421,11 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
     }
     this.saveDrawingsInApp();
     this.updateDrawControl(true);
-  }
-
-  private updateDrawControl(enableMarker: boolean): void {
-    if (this.drawControl) {
-      this.map.removeControl(this.drawControl);
-    }
-    this.drawControl = new L.Control.Draw({
-      position: 'topright',
-      draw: {
-        circle: false,
-        circlemarker: false,
-        marker: enableMarker ? { icon: redIcon } : false,
-        polygon: false,
-        polyline: false,
-        rectangle: false
-      },
-      edit: {
-        featureGroup: this.drawnItems,
-        edit: false,
-        remove: false
-      }
-    });
-    this.map.addControl(this.drawControl);
+    this.lastValidMarkerPosition = null;
   }
 
   public hasMarker(): boolean {
     return this.drawnItems.getLayers().some(layer => layer instanceof L.Marker);
-  }
-
-  private emitDrawingsChanged() {
-    this.drawingsChanged.emit(this.drawingsGeoJson);
   }
 }
 

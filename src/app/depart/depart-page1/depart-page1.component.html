@@ -1,20 +1,138 @@
-<div class="leaflet-container">
+<div class="map-container">
+  <div class="map-content">
+    <!-- Form Section -->
+    <div class="form-section">
+      <!-- Search Bar with Icon -->
+      <div class="input-group" style="margin-bottom: 10px;">
+        <label for="search">Search:</label>
+        <div class="search-input-wrapper">
+          <input 
+            type="text" 
+            id="search" 
+            name="search" 
+            [(ngModel)]="searchQuery" 
+            placeholder="Enter search term"
+            (keyup.enter)="onSearch()"
+            class="search-input"
+          />
+          <button class="search-icon-button" (click)="onSearch()" type="button">
+            <mat-icon>search</mat-icon>
+          </button>
+        </div>
+      </div>
 
+      <!-- Search Results -->
+      @if (showResults && results.length > 0) {
+        <div class="search-results">
+          @for (location of results; track location.id) {
+            <div class="location-item" (click)="handleSelect(location)">
+              <div class="location-name">
+                <mat-icon class="location-pin">place</mat-icon>
+                <div class="location-title">{{ location.label }}</div>
+              </div>
+            </div>
+          }
+        </div>
+      }
 
-    
+      <!-- Selected Location -->
+      @if (selectedLocations.length > 0) {
+        <div class="selected-location">
+          <div class="location-name">
+            <mat-icon class="location-pin">place</mat-icon>
+            <div class="location-title">{{ selectedLocations[0].label }}</div>
+          </div>
+          @if (selectedLocations[0].x && selectedLocations[0].y) {
+            <div class="location-coords">
+              Lat: {{ selectedLocations[0].y.toFixed(6) }}, Lng: {{ selectedLocations[0].x.toFixed(6) }}
+            </div>
+          }
+        </div>
+      }
 
-  <!-- Department input field -->
-  <div class="input-group" style="margin-bottom: 10px;">
-    <label for="department">Department:</label>
-    <input type="text" id="department" name="department" [(ngModel)]="site" placeholder="Enter department" />
-  </div>
+      <!-- Dropdowns -->
+      <div class="dropdown-group">
+        <div class="input-group" style="margin-bottom: 10px;">
+          <label for="country">Country *</label>
+          <select 
+            id="country" 
+            name="country" 
+            [(ngModel)]="selectedCountry"
+            (change)="onCountryChange()"
+          >
+            <option value="">Select Country</option>
+            <option *ngFor="let country of countries" [value]="country">
+              {{ country }}
+            </option>
+          </select>
+        </div>
 
-  <div class="map-wrapper">
-    <div 
-      #mapContainer 
-      id="map" 
-      class="map-container">
+        <div class="input-group" style="margin-bottom: 10px;">
+          <label for="region">Region *</label>
+          <select 
+            id="region" 
+            name="region" 
+            [(ngModel)]="selectedRegion"
+            (change)="onRegionChange()"
+            [disabled]="!selectedCountry"
+          >
+            <option value="">Select Region</option>
+            <option *ngFor="let region of regions" [value]="region">
+              {{ region }}
+            </option>
+          </select>
+        </div>
+
+        <div class="input-group" style="margin-bottom: 10px;">
+          <label for="county">County *</label>
+          <select 
+            id="county" 
+            name="county" 
+            [(ngModel)]="selectedCounty"
+            (change)="onCountyChange()"
+            [disabled]="!selectedRegion"
+          >
+            <option value="">Select County</option>
+            <option *ngFor="let county of counties" [value]="county">
+              {{ county }}
+            </option>
+          </select>
+        </div>
+
+        <div class="input-group" style="margin-bottom: 10px;">
+          <label for="townCity">Town/City *</label>
+          <select 
+            id="townCity" 
+            name="townCity" 
+            [(ngModel)]="selectedTownCity"
+            [disabled]="!selectedCounty"
+          >
+            <option value="">Select Town/City</option>
+            <option *ngFor="let townCity of townCities" [value]="townCity">
+              {{ townCity }}
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button class="reset-button" (click)="handleReset()" 
+          [disabled]="selectedLocations.length === 0">
+          <mat-icon>refresh</mat-icon>
+          Reset
+        </button>
+        <button class="confirm-button" (click)="handleConfirm()" 
+          [disabled]="selectedLocations.length === 0">
+          <mat-icon>check</mat-icon>
+          Confirm
+        </button>
+      </div>
+    </div>
+
+    <!-- Map Section -->
+    <div class="map-wrapper">
+      <div #mapContainer id="map" class="map-container"></div>
     </div>
   </div>
-
 </div>

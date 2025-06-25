@@ -1,12 +1,20 @@
 <!-- leaflet-maps.component.html -->
+<!-- leaflet-maps.component.html -->
 <div class="leaflet-container">
-
-  <!-- Building name input field -->
-  <div class="input-group" style="margin-bottom: 10px;">
-    <label for="building">Building:</label>
-    <input type="text" id="building" name="building" [(ngModel)]="building" (ngModelChange)="onBuildingChange()" placeholder="Enter building name" />
-    <button type="button" (click)="saveLocation()">Save</button>
-  </div>
+  <form (submit)="$event.preventDefault()" class="input-form">
+    <div class="input-group" style="margin-bottom: 10px;">
+      <label for="building">Building:</label>
+      <input 
+        type="text" 
+        id="building" 
+        name="building" 
+        [(ngModel)]="building" 
+        (ngModelChange)="onBuildingChange()" 
+        placeholder="Enter building name" 
+      />
+      <button type="button" (click)="saveLocation()">Save</button>
+    </div>
+  </form>
 
   <div class="map-wrapper">
     <div 
