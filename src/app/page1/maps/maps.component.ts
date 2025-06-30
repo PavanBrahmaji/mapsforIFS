@@ -14,7 +14,7 @@ export class MapsComponent {
   @ViewChild(GlobeComponent) globeComponent!: GlobeComponent;
   @ViewChild(LeafletMapsComponent) leafletComponent!: LeafletMapsComponent;
 
-  showGlobe = false; // <-- control which component is visible
+  showGlobe = true; // <-- control which component is visible
 
   ngOnChanges() {
   if (this.selectedLocation) {

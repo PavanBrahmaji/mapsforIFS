@@ -9,6 +9,7 @@ import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 import { Subject } from 'rxjs';
 import { Location, searchLocations } from '../../../utils/location-utils';
 import { GlobalService } from '../../global.service';
+import { FlyAnimationService } from '../../services/fly-animation.service';
 
 const redIcon = L.icon({
   iconUrl: 'images/marker.svg',
@@ -26,7 +27,7 @@ const redIcon = L.icon({
 })
 export class DepartPage1Component implements AfterViewInit, OnDestroy {
   @ViewChild('mapContainer', { static: false }) mapContainer!: ElementRef;
-  
+
   // Search functionality properties
   searchControl = new FormControl('');
   results: Location[] = [];
@@ -112,11 +113,13 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
 
   constructor(
     private snackBar: MatSnackBar,
-    public globalService: GlobalService
-  ) {}
+    public globalService: GlobalService,
+    private flyAnimationService: FlyAnimationService // Inject the service
+  ) { }
 
   ngAfterViewInit(): void {
     this.initializeMap();
+    this.flyAnimationService.setMap(this.map); // Set the map instance for the service
     this.checkOnlineStatus();
     this.setupSearchListener();
     window.addEventListener('online', this.updateOnlineStatus);
@@ -208,24 +211,32 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
     const isAlreadySelected = this.selectedLocations.some(
       loc => loc.label === location.label || (loc.x === location.x && loc.y === location.y)
     );
-    
+
     if (!isAlreadySelected) {
       this.selectedLocations = [location];
       this.snackBar.open(`Added: ${location.label}`, 'Dismiss', {
         duration: 2000,
       });
-      
+
       this.addMarkerForSelectedLocation(location);
-      
+
       if (this.map && location.x && location.y) {
-        this.map.setView([location.y, location.x], 16, { animate: true });
+        // Use the flyAnimationService here
+        this.flyAnimationService.flyToLocation([location.y, location.x], {
+          targetZoom: 16,
+          duration: 1500, // Customize duration
+          showLoadingIndicator: true,
+          mapContainerRef: this.mapContainer.nativeElement
+        }).subscribe(() => {
+          console.log('Fly animation completed!');
+        });
       }
     } else {
       this.snackBar.open(`Location already selected: ${location.label}`, 'Dismiss', {
         duration: 2000,
       });
     }
-    
+
     this.searchControl.setValue('');
     this.showResults = false;
     this.results = [];
@@ -253,7 +264,7 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
       this.selectedLocationMarker.on('dragend', (e: any) => {
         const marker = e.target;
         const position = marker.getLatLng();
-        
+
         if (this.selectedLocations.length > 0) {
           this.selectedLocations[0].x = position.lng;
           this.selectedLocations[0].y = position.lat;
@@ -298,12 +309,12 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
   handleReset(): void {
     this.selectedLocations = [];
     this.handleClear();
-    
+
     if (this.selectedLocationMarker) {
       this.map.removeLayer(this.selectedLocationMarker);
       this.selectedLocationMarker = undefined;
     }
-    
+
     this.snackBar.open('Location cleared', 'Dismiss', {
       duration: 2000,
     });
@@ -317,9 +328,9 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
         lng: this.selectedLocations[0].x,
         timestamp: new Date().toISOString()
       };
-      
+
       localStorage.setItem('departmentMarker', JSON.stringify(newMarker));
-      
+
       this.snackBar.open(`Confirmed location for site boundary`, 'Dismiss', {
         duration: 3000,
       });
@@ -361,16 +372,16 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
 
   private handleNewMarker(marker: L.Marker): void {
     marker.setIcon(redIcon);
-    
+
     if (this.markerLabel.trim()) {
-      marker.bindTooltip(this.markerLabel, { 
-        permanent: true, 
+      marker.bindTooltip(this.markerLabel, {
+        permanent: true,
         direction: 'top',
         className: 'custom-tooltip',
         interactive: false
       }).openTooltip();
     }
-    
+
     this.makeMarkerDraggable(marker);
     this.drawnItems.addLayer(marker);
     this.updateDrawControl(false);
@@ -390,7 +401,7 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
     if (this.drawControl) {
       this.map.removeControl(this.drawControl);
     }
-    
+
     this.drawControl = new L.Control.Draw({
       position: 'topright',
       draw: {
@@ -407,7 +418,7 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
         remove: false
       }
     });
-    
+
     this.map.addControl(this.drawControl);
   }
 
@@ -430,9 +441,9 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
     this.selectedTownCity = '';
     this.townCities = [];
 
-    if (this.selectedCountry && this.selectedRegion && 
-        this.locationData[this.selectedCountry] && 
-        this.locationData[this.selectedCountry][this.selectedRegion]) {
+    if (this.selectedCountry && this.selectedRegion &&
+      this.locationData[this.selectedCountry] &&
+      this.locationData[this.selectedCountry][this.selectedRegion]) {
       this.counties = Object.keys(this.locationData[this.selectedCountry][this.selectedRegion]);
     } else {
       this.counties = [];
@@ -443,9 +454,9 @@ export class DepartPage1Component implements AfterViewInit, OnDestroy {
     this.selectedTownCity = '';
 
     if (this.selectedCountry && this.selectedRegion && this.selectedCounty &&
-        this.locationData[this.selectedCountry] && 
-        this.locationData[this.selectedCountry][this.selectedRegion] &&
-        this.locationData[this.selectedCountry][this.selectedRegion][this.selectedCounty]) {
+      this.locationData[this.selectedCountry] &&
+      this.locationData[this.selectedCountry][this.selectedRegion] &&
+      this.locationData[this.selectedCountry][this.selectedRegion][this.selectedCounty]) {
       this.townCities = this.locationData[this.selectedCountry][this.selectedRegion][this.selectedCounty];
     } else {
       this.townCities = [];

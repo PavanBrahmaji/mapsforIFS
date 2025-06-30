@@ -57,7 +57,7 @@ export class GlobeComponent implements OnInit, OnDestroy {
 
   private async loadTextures(): Promise<void> {
     const texturePromises = [
-      this.loadTexture('images/earth.jpg', 'map')
+      this.loadTexture('images/earth5.jpg', 'map')
     ];
 
     await Promise.all(texturePromises);

@@ -106,3 +106,54 @@
 }
 
 
+/* Fly Indicator Styles */
+.fly-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  z-index: 1000; /* Ensure it's above the map */
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.fly-indicator.fade-out {
+  opacity: 0;
+}
+
+.fly-indicator .fly-icon {
+  margin-right: 10px;
+  animation: pulse 1.5s infinite; /* Simple pulse animation for the icon */
+}
+
+.fly-indicator .fly-icon svg {
+  fill: white;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Optional: Styles for map during flying (e.g., subtle blur) */
+.map-flying {
+  filter: blur(1px); /* A subtle blur effect */
+  transition: filter 0.5s ease-out;
+}
+
+.map-ready {
+  filter: blur(0);
+}
+
+.map-loading {
+  /* You can add initial loading styles here */
+  opacity: 0.8;
+}
