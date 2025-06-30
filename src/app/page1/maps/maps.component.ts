@@ -1,18 +1,41 @@
-import { Component, Input, ViewChild } from '@angular/core';
+import { Component, Input, ViewChild, AfterViewInit } from '@angular/core';
 import { GlobeComponent } from './globe/globe.component';
 import { LeafletMapsComponent } from './leaflet-maps/leaflet-maps.component';
+import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-maps',
-  imports: [GlobeComponent, LeafletMapsComponent],
   templateUrl: './maps.component.html',
-  styleUrl: './maps.component.css'
+  styleUrls: ['./maps.component.css'],
+  imports: [GlobeComponent, LeafletMapsComponent,CommonModule]
 })
 export class MapsComponent {
-
   @Input() selectedLocation: { lat: number, lng: number } | null = null;
   @ViewChild(GlobeComponent) globeComponent!: GlobeComponent;
   @ViewChild(LeafletMapsComponent) leafletComponent!: LeafletMapsComponent;
+
+  showGlobe = false; // <-- control which component is visible
+
+  ngOnChanges() {
+  if (this.selectedLocation) {
+    // Trigger globe fly first
+    if (this.globeComponent) {
+      this.globeComponent.flyTo(this.selectedLocation.lat, this.selectedLocation.lng, () => {
+        this.showGlobe = false;
+
+        // Now trigger leaflet fly after globe completes
+        setTimeout(() => {
+          if (this.leafletComponent?.map) {
+            this.leafletComponent.flyToLocation([
+              this.selectedLocation!.lat,
+              this.selectedLocation!.lng,
+            ]);
+          }
+        }, 500); // short delay to ensure component is rendered
+      });
+    }
+  }
+}
 
   startGlobeRotation(): void {
     if (this.globeComponent) {
@@ -20,32 +43,11 @@ export class MapsComponent {
     }
   }
 
-  ngOnChanges() {
-    if (this.selectedLocation) {
-      console.log('Selected Location:', this.selectedLocation);
-      if (this.globeComponent) {
-        this.globeComponent.flyTo(this.selectedLocation.lat, this.selectedLocation.lng);
-      }
-      if (this.leafletComponent) {
-        this.leafletComponent.lat = this.selectedLocation.lat;
-        this.leafletComponent.lon = this.selectedLocation.lng;
-        // Optionally, recenter the map if needed:
-        if (this.leafletComponent.map) {
-          this.leafletComponent.map.setView([this.selectedLocation.lat, this.selectedLocation.lng], this.leafletComponent.map.getZoom());
-        }
-      }
-    }
-  }
-
   public resetDrawings(): void {
-    if (this.leafletComponent) {
-      this.leafletComponent.resetDrawings();
-    }
+    this.leafletComponent?.resetDrawings();
   }
 
   public saveDrawings(): void {
-    if (this.leafletComponent) {
-      this.leafletComponent.saveDrawings();
-    }
+    this.leafletComponent?.saveDrawings();
   }
 }

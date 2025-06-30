@@ -1,32 +1,30 @@
 /* You can add global styles to this file, and also import other style files */
 
-html, body { height: 100%; }
-body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
-
-
 @import url('https://fonts.googleapis.com/css?family=Roboto:300,400,500&display=swap');
 
-body {
-  margin: 0;
-  font-family: 'Roboto', sans-serif;
+html, body { 
+  height: 100%; 
+}
+
+body { 
+  margin: 0; 
+  font-family: 'Roboto', "Helvetica Neue", sans-serif; 
 }
 
 .leaflet-tooltip {
-    padding: 0px !important;
-    background-color: transparent !important;
-    border: none !important;
+  padding: 0px !important;
+  background-color: transparent !important;
+  border: none !important;
 }
 
-
-.leaflet-tooltip-top:before{
-    border: none !important;
+.leaflet-tooltip-top:before {
+  border: none !important;
 }
-
 
 .leaflet-tooltip.custom-tooltip-dept {
-    box-shadow: none;
-    color: red;
-    font-weight: bold;
-    /* text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white; */
-    filter: drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);
+  box-shadow: none;
+  color: red;
+  font-weight: bold;
+  /* text-shadow: -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white, 1px 1px 0 white; */
+  filter: drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white) drop-shadow(0 0 0.5px white);
 }

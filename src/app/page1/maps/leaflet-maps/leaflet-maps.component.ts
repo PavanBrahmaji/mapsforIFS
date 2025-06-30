@@ -2,17 +2,18 @@ import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, DestroyRef, in
 import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
 import 'leaflet-draw';
-import { GlobalService } from '../../../global.service'; // Already imported
+import { GlobalService } from '../../../global.service';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop'; // For automatic unsubscription
+import { FlyAnimationService } from '../../../services/fly-animation.service';
 
 // Use a red marker icon for all markers
 const iconRed = L.icon({
-  iconUrl: 'images/site_marker.svg', // Use your local SVG marker
+  iconUrl: 'images/site_marker.svg',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   tooltipAnchor: [16, -28]
 });
-
 
 L.Marker.prototype.options.icon = iconRed;
 
@@ -24,6 +25,7 @@ declare module 'leaflet-geosearch' {
 
 @Component({
   selector: 'app-leaflet-maps',
+  standalone: true, // Mark as standalone
   imports: [CommonModule],
   templateUrl: './leaflet-maps.component.html',
   styleUrl: './leaflet-maps.component.css'
@@ -42,9 +44,12 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
   drawnItems!: L.FeatureGroup;
   private drawControl?: L.Control.Draw;
   private originalMarkerPosition?: L.LatLng;
+  private destroyRef = inject(DestroyRef); // Inject DestroyRef
 
-  // Remove any local site variable, always use the global service
-  constructor(private globalService: GlobalService) {}
+  constructor(
+    private globalService: GlobalService,
+    private flyAnimationService: FlyAnimationService // Inject the service
+  ) {}
 
   ngOnInit(): void {
     // No need to set site here, always use this.globalService.site
@@ -52,21 +57,26 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
 
   ngAfterViewInit(): void {
     this.initializeMap();
+    this.flyAnimationService.setMap(this.map); // Set the map instance in the service
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (this.map && (changes['lat'] || changes['lon'])) {
-      // Zoom to the new location with a reasonable zoom level (e.g., 14 for city/street)
-      this.map.setView([this.lat, this.lon], 17, { animate: true });
+      // Use enhanced fly animation when coordinates change
+      this.flyAnimationService.flyToLocation([this.lat, this.lon], {
+        mapContainerRef: this.mapContainer.nativeElement
+      }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+        console.log('Fly to location animation completed from ngOnChanges!');
+      });
     }
-        console.log('this.globalService.site',this.globalService.site)
-
+    console.log('this.globalService.site', this.globalService.site);
   }
 
   private initializeMap(): void {
     // Initialize map centered on the United States with zoom level 4
     this.map = L.map(this.mapContainer.nativeElement, {
-      zoomControl: false // Disable default zoom control (top left)
+      zoomControl: false,
+      preferCanvas: true // Better performance for animations
     }).setView([this.lat, this.lon], 4);
 
     // Add zoom control to the bottom right
@@ -77,10 +87,87 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       attribution: '© OpenStreetMap contributors'
     }).addTo(this.map);
 
-    // Remove baseLayers and overlays logic, and do not add L.control.layers
-
     // Initialize drawing
     this.initializeDrawing();
+
+    // Add loading animation class to map container
+    this.mapContainer.nativeElement.classList.add('map-loading');
+
+    // Remove loading class after map is ready
+    this.map.whenReady(() => {
+      setTimeout(() => {
+        this.mapContainer.nativeElement.classList.remove('map-loading');
+        this.mapContainer.nativeElement.classList.add('map-ready');
+      }, 500);
+    });
+  }
+
+  // Delegate to the service for fly animation to a location
+  public flyToLocationWithAnimation(latlng: L.LatLngExpression, options?: {
+    duration?: number;
+    targetZoom?: number;
+    easeLinearity?: number;
+    showLoadingIndicator?: boolean;
+  }): void {
+    this.flyAnimationService.flyToLocation(latlng, {
+      ...options,
+      mapContainerRef: this.mapContainer.nativeElement
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      console.log('Fly to location animation completed!');
+    });
+  }
+
+  // Original fly method (now also delegates to the enhanced version)
+  public flyToLocation(latlng: L.LatLngExpression): void {
+    this.flyToLocationWithAnimation(latlng);
+  }
+
+  // Smooth zoom with animation (kept as is, as it's not directly related to 'fly' behavior)
+  public smoothZoomTo(targetZoom: number, duration: number = 1000): void {
+    const currentZoom = this.map.getZoom();
+    const zoomDiff = targetZoom - currentZoom;
+    const steps = Math.abs(zoomDiff) * 10; // More steps for smoother animation
+    const stepSize = zoomDiff / steps;
+    const stepDuration = duration / steps;
+
+    let currentStep = 0;
+    let animationFrame: number; // Local variable
+
+    const animate = () => {
+      if (currentStep < steps) {
+        const newZoom = currentZoom + (stepSize * currentStep);
+        this.map.setZoom(newZoom);
+        currentStep++;
+        animationFrame = requestAnimationFrame(() => {
+          setTimeout(animate, stepDuration);
+        });
+      } else {
+        cancelAnimationFrame(animationFrame); // Cleanup on completion
+      }
+    };
+
+    animate();
+  }
+
+  // Delegate to the service for fly animation to bounds
+  public flyToBounds(bounds: L.LatLngBounds, options?: L.FitBoundsOptions): void {
+    this.flyAnimationService.flyToBounds(bounds, {
+      ...options,
+      mapContainerRef: this.mapContainer.nativeElement
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      console.log('Fly to bounds animation completed!');
+    });
+  }
+
+  // No longer needed here, moved to service
+  // private showFlyIndicator(): void { /* ... */ }
+  // private hideFlyIndicator(): void { /* ... */ }
+  // private cleanupAnimations(): void { /* ... */ }
+
+  ngOnDestroy(): void {
+    // takeUntilDestroyed handles subscription cleanup for Observables from the service
+    // No manual cleanup of animationFrame needed if `smoothZoomTo` is not called frequently or managed outside.
+    // However, if `smoothZoomTo` is critical and long-running, you might need a separate DestroyRef or a way to cancel its loop.
   }
 
   private initializeDrawing(): void {
@@ -95,8 +182,8 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
             color: '#CC00EC',
             opacity: 0.8,
             fillColor: '#CC00EC',
-            fillOpacity: 0.07, // <-- Set to 0.07
-            dashArray: '6, 6' // Dotted line
+            fillOpacity: 0.07,
+            dashArray: '6, 6'
           })
         });
         geoJsonLayer.eachLayer((layer: any) => {
@@ -111,7 +198,6 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       if (this.drawControl) {
         this.map.removeControl(this.drawControl);
       }
-      // Disable polygon tool if a polygon already exists or if there is no marker
       const polygonExists = this.drawnItems.getLayers().some(l => l instanceof L.Polygon);
       const markerExists = this.drawnItems.getLayers().some(l => l instanceof L.Marker);
 
@@ -141,20 +227,15 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       this.map.addControl(this.drawControl);
     };
 
-    // Helper to check if a marker exists
     const hasMarker = () => this.drawnItems.getLayers().some(l => l instanceof L.Marker);
-    // Helper to check if a polygon exists
     const hasPolygon = () => this.drawnItems.getLayers().some(l => l instanceof L.Polygon);
 
-    // Initial draw control: only marker tool enabled if no marker exists, edit disabled
     createDrawControl(!hasMarker(), false);
 
     const enableOtherTools = () => {
-      // Enable polygon tool, enable edit only if both marker and polygon exist
       const enableEdit = hasMarker() && hasPolygon();
       if (this.drawControl) {
         this.map.removeControl(this.drawControl);
-        
       }
       const polygonExists = this.drawnItems.getLayers().some(l => l instanceof L.Polygon);
       const markerExists = this.drawnItems.getLayers().some(l => l instanceof L.Marker);
@@ -178,7 +259,7 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
         edit: {
           featureGroup: this.drawnItems,
           remove: false,
-          edit: enableEdit ? {} : false // <-- Fix: Use object or false instead of boolean
+          edit: enableEdit ? {} : false
         }
       });
       this.map.addControl(this.drawControl);
@@ -194,18 +275,27 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
       const layer = e.layer;
 
       if (type === 'marker') {
-        // Check if a polygon exists
         const polygonLayer = this.drawnItems.getLayers().find(l => l instanceof L.Polygon) as L.Polygon | undefined;
         if (polygonLayer) {
-          // If a polygon exists, only allow marker if inside the polygon
           const markerLatLng = layer.getLatLng();
           if (!leafletPointInPolygon(markerLatLng, polygonLayer)) {
             alert('Marker must be placed inside the boundary.');
-            return; // Do not add the marker
+            return;
           }
         }
+
         this.drawnItems.addLayer(layer);
-        // Use site value from global service
+
+        // Fly to the new marker with animation using the service
+        this.flyAnimationService.flyToLocation(layer.getLatLng(), {
+          duration: 1500,
+          targetZoom: 17,
+          showLoadingIndicator: false,
+          mapContainerRef: this.mapContainer.nativeElement
+        }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+          console.log('Marker fly animation completed!');
+        });
+
         const tooltipHtml = `
           <div style="
             display: flex;
@@ -227,18 +317,16 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
         layer.bindTooltip(tooltipHtml, {
          permanent: true,
         direction: 'top',
-        offset: [40, -6],  // Adjust this to position the tooltip precisely
-        sticky: false,     // Set to false for fixed position
+        offset: [40, -6],
+        sticky: false,
         className: 'custom-tooltip',
-        interactive: false  // No custom class needed, all styling is inline
+        interactive: false
         }).openTooltip();
         enableOtherTools();
       } else if (type === 'polygon' || type === 'rectangle') {
-        // Check if a marker exists and is inside the new polygon
         const markerLayer = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
         if (markerLayer) {
           const markerLatLng = markerLayer.getLatLng();
-          // Use leafletPointInPolygon to check if marker is inside the polygon
           const tempPolygon = layer as L.Polygon;
           if (leafletPointInPolygon(markerLatLng, tempPolygon)) {
             layer.setStyle?.({
@@ -249,13 +337,19 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
               dashArray: '12, 12'
             });
             this.drawnItems.addLayer(layer);
+
+            // Fly to fit the polygon bounds using the service
+            this.flyAnimationService.flyToBounds(layer.getBounds(), {
+              mapContainerRef: this.mapContainer.nativeElement
+            }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+              console.log('Fly to bounds animation completed!');
+            });
+
             enableOtherTools();
           } else {
-            // Marker is not inside the polygon, show alert and do not add the polygon
             alert('Marker must be inside the boundary. Please draw the boundary around the marker.');
           }
         } else {
-          // No marker exists, show alert and do not add the polygon
           alert('Please add a marker before drawing a boundary.');
         }
       } else {
@@ -266,26 +360,22 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
     });
 
     this.map.on(L.Draw.Event.DELETED, () => {
-      // After delete, update edit button state
       const enableEdit = hasMarker() && hasPolygon();
       createDrawControl(!hasMarker(), enableEdit);
       saveDrawingsInApp();
     });
 
-    // Handle edit events to prevent marker from moving outside boundary
     this.map.on(L.Draw.Event.EDITED, (e: any) => {
       const layers = e.layers;
       let isValid = true;
-      
+
       layers.eachLayer((layer: any) => {
         if (layer instanceof L.Marker) {
           const markerLatLng = layer.getLatLng();
-          // Check if marker is still inside any polygon
           const polygonLayer = this.drawnItems.getLayers().find(l => l instanceof L.Polygon) as L.Polygon | undefined;
-          
+
           if (polygonLayer && !leafletPointInPolygon(markerLatLng, polygonLayer)) {
             isValid = false;
-            // Reset marker to its original position (we'll store this before editing starts)
             const originalMarker = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker;
             if (originalMarker && this.originalMarkerPosition) {
               layer.setLatLng(this.originalMarkerPosition);
@@ -294,21 +384,18 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
           }
         }
       });
-      
+
       if (isValid) {
         saveDrawingsInApp();
-        // If there is no marker after editing, enable marker tool so user can add a new marker
         const hasMarker = this.drawnItems.getLayers().some(l => l instanceof L.Marker);
         const hasPolygon = this.drawnItems.getLayers().some(l => l instanceof L.Polygon);
         if (!hasMarker && hasPolygon) {
-          createDrawControl(true, true); // Enable marker tool and edit
+          createDrawControl(true, true);
         }
       }
     });
 
-    // Add this before the EDITSTART event handler inside initializeDrawing():
     this.map.on(L.Draw.Event.EDITSTART, () => {
-      // Check if both marker and polygon exist
       const markerLayer = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
       const polygonLayer = this.drawnItems.getLayers().find(l => l instanceof L.Polygon) as L.Polygon | undefined;
 
@@ -317,18 +404,13 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
           'Warning: If you edit the boundary, the marker will be removed. You will need to add a new marker inside the boundary after saving. Continue?'
         );
         if (!proceed) {
-          // Cancel editing mode
           this.map.fire('draw:editstop');
           return;
         } else {
-          // Remove the marker if user clicks OK
           this.drawnItems.removeLayer(markerLayer);
-          // DO NOT call createDrawControl here!
-          // Let the user finish editing and click Save/Cancel
         }
       }
 
-      // Store original marker position before editing starts (if marker still exists)
       const markerAfterRemoval = this.drawnItems.getLayers().find(l => l instanceof L.Marker) as L.Marker | undefined;
       if (markerAfterRemoval) {
         this.originalMarkerPosition = markerAfterRemoval.getLatLng();
@@ -339,30 +421,26 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
   public resetDrawings(): void {
     this.drawnItems.clearLayers();
     this.globalService.globalVar = null;
-    // Do NOT call this.initializeDrawing() here
   }
 
   public saveDrawings(): void {
     if (this.drawnItems) {
       const geoJson = this.drawnItems.toGeoJSON();
-      this.globalService.globalVar = geoJson; // Store in service only
+      this.globalService.globalVar = geoJson;
     }
   }
 
-  // Store drawings in application state (not localStorage)
   public storeDrawingsInApp(): void {
     if (this.drawnItems) {
       this.globalService.globalVar = this.drawnItems.toGeoJSON();
     }
   }
 
-  // Always get the latest site value from the global service
   get site(): string {
     return this.globalService.site;
   }
 }
 
-// Add this helper function at the bottom of your file (outside the class):
 function leafletPointInPolygon(latlng: L.LatLng, polygon: L.Polygon): boolean {
   const poly = polygon.getLatLngs()[0] as L.LatLng[];
   let inside = false;

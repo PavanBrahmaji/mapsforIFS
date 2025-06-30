@@ -239,7 +239,8 @@ export class GlobeComponent implements OnInit, OnDestroy {
     // this.controls.target.set(0, 0, 0);
   }
 
-  public flyTo(lat: number, lng: number, onComplete?: () => void): void {
+  // In globe.component.ts
+public flyTo(lat: number, lng: number, onComplete?: () => void): void {
     const phi = (90 - lat) * (Math.PI / 180);
     const theta = (lng + 180) * (Math.PI / 180);
 
@@ -320,7 +321,8 @@ export class GlobeComponent implements OnInit, OnDestroy {
             this.controls.target.set(0, 0, 0);
             this.controls.autoRotate = false;
             this.autoRotate = false;
-            // Call the callback to load Leaflet map
+            
+            // Call the completion callback if provided
             if (onComplete) {
               onComplete();
             }
@@ -331,5 +333,5 @@ export class GlobeComponent implements OnInit, OnDestroy {
     };
 
     moveToDirection();
-  }
+}
 }

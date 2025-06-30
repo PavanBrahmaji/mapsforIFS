@@ -1,7 +1,11 @@
-<!-- <app-globe #globe></app-globe> -->
-<app-leaflet-maps
-  #leaflet
-  [lat]="selectedLocation?.lat ?? 39.8283"
-  [lon]="selectedLocation?.lng ?? -98.5795"
- >
-</app-leaflet-maps>
+<ng-container *ngIf="showGlobe">
+  <app-globe #globe></app-globe>
+</ng-container>
+
+<ng-container *ngIf="!showGlobe">
+  <app-leaflet-maps
+    #leaflet
+    [lat]="selectedLocation?.lat ?? 39.8283"
+    [lon]="selectedLocation?.lng ?? -98.5795"
+  ></app-leaflet-maps>
+</ng-container>
