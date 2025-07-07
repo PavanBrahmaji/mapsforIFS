@@ -1,0 +1,152 @@
+/* page6.component.css */
+
+.map-container {
+    height: 600px;
+    width: 100%;
+}
+
+/* ADDED: A full-screen backdrop for the modal */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* CHANGED: Modal styles completely overhauled for responsiveness */
+.boundary-model {
+    position: relative; /* Changed from absolute */
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+
+    /* Responsive sizing */
+    width: 90vw;
+    max-width: 500px; /* Increased max-width slightly */
+    max-height: 90vh; /* Limit height to 90% of viewport */
+
+    /* Flexbox to structure header/body/footer */
+    display: flex;
+    flex-direction: column;
+}
+
+.boundary-model .model-header {
+    flex-shrink: 0; /* Prevent header from shrinking */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.boundary-model .model-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.boundary-model .close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+/* Make the body scrollable if content overflows */
+.boundary-model .model-body {
+    flex-grow: 1; /* Allow body to grow and fill space */
+    padding: 1rem;
+    overflow-y: auto; /* Enable vertical scrolling */
+}
+
+.boundary-model .model-body p {
+    margin: 5px 0 15px 0;
+}
+
+/* A dedicated footer for action buttons */
+.boundary-model .model-footer {
+    flex-shrink: 0;
+    padding: 1rem;
+    border-top: 1px solid #dee2e6;
+    display: flex;
+    justify-content: flex-end; /* Align buttons to the right */
+    gap: 0.5rem;
+}
+
+.boundary-model .model-footer button {
+    margin-top: 0; /* Reset margin */
+}
+
+.boundary-model button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.boundary-model button:hover {
+    background-color: #0056b3;
+}
+
+.cancel-button {
+    background-color: #6c757d !important;
+}
+
+.cancel-button:hover {
+    background-color: #5a6268 !important;
+}
+
+/* Styles for image adjustment UI */
+.image-adjustment-container {
+    margin-top: 15px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.canvas-wrapper {
+    position: relative;
+    border: 1px solid #ddd;
+    background-color: #f0f0f0;
+    cursor: grab;
+    overflow: hidden;
+    /* Make canvas responsive */
+    width: 100%;
+    max-width: 400px;
+    aspect-ratio: 4 / 3; /* Maintain aspect ratio */
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+    margin-bottom: 10px;
+}
+
+#adjustmentCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.adjustment-controls {
+    margin-top: 15px;
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}

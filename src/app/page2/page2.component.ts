@@ -50,13 +50,13 @@ export class Page2Component implements OnInit, AfterViewInit, OnChanges {
 
   private initializeMap(): void {
     this.map = L.map(this.mapContainer.nativeElement, {
-      zoomControl: false
+      zoomControl: false,
+      attributionControl: false,
     }).setView([this.lat, this.lon], 4);
 
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
     }).addTo(this.map);
 
     this.initializeDrawing();

@@ -84,7 +84,6 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
 
     // Use only OpenStreetMap as the base layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
     }).addTo(this.map);
 
     // Initialize drawing

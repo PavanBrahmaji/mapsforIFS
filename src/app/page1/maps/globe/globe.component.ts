@@ -57,7 +57,7 @@ export class GlobeComponent implements OnInit, OnDestroy {
 
   private async loadTextures(): Promise<void> {
     const texturePromises = [
-      this.loadTexture('images/earth5.jpg', 'map')
+      this.loadTexture('images/earth7.png', 'map')
     ];
 
     await Promise.all(texturePromises);
@@ -159,10 +159,12 @@ export class GlobeComponent implements OnInit, OnDestroy {
     this.globe.add(atmosphere);
 
     // Add lights - NO shadow casting
-    const ambientLight = new THREE.AmbientLight(0x404040);
+    // Decreased ambient light to be very dim
+    const ambientLight = new THREE.AmbientLight(0x050505); // Very dark ambient light
     this.scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    // Decreased directional light intensity to 0.1
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.1); // Reduced from 0.5 to 0.1
     directionalLight.position.set(5, 3, 5);
     this.scene.add(directionalLight);
 

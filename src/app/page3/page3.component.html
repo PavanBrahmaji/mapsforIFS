@@ -4,7 +4,10 @@
     <div 
       #mapContainer 
       id="map" 
-      class="map-container">
+      class="map-container"
+      (click)="$event.preventDefault(); $event.stopPropagation()"
+      >
+      
     </div>
   </div>
 

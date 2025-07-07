@@ -1,13 +1,15 @@
 <!-- leaflet-maps.component.html -->
 <div class="leaflet-container">
   
+ <div class="leaflet-container">
   <div class="map-wrapper">
-    <div 
-      #mapContainer 
-      id="map" 
-      class="map-container">
+    <div
+      #mapContainer
+      id="map"
+      class="map-container"
+      (click)="$event.preventDefault(); $event.stopPropagation()"
+    ></div>
     </div>
   </div>
-  >
 
 </div>
