@@ -59,7 +59,6 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
   private lastMouseY: number = 0;
 
   private readonly CANVAS_WIDTH = 400;
-  private readonly CANVAS_HEIGHT = 300;
 
   ngOnInit(): void { }
 
@@ -177,26 +176,32 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
   }
 
   private setupImageAdjustmentCanvas(): void {
-    if (!this.adjustmentCanvas || !this.imageLoadedForAdjustment) {
+    if (!this.adjustmentCanvas || !this.imageLoadedForAdjustment || !this.boundaryPolygonLayer) {
       setTimeout(() => this.setupImageAdjustmentCanvas(), 50);
       return;
     }
 
     const canvas = this.adjustmentCanvas.nativeElement;
     this.canvasCtx = canvas.getContext('2d')!;
+
+    const polygonBounds = this.boundaryPolygonLayer.getBounds();
+    const mapWidthDegrees = polygonBounds.getEast() - polygonBounds.getWest();
+    const mapHeightDegrees = polygonBounds.getNorth() - polygonBounds.getSouth();
+    const aspectRatio = mapWidthDegrees / mapHeightDegrees;
+
     canvas.width = this.CANVAS_WIDTH;
-    canvas.height = this.CANVAS_HEIGHT;
+    canvas.height = Math.round(canvas.width / aspectRatio);
 
     if (this.tempImageScale === 1 && this.tempImageOffsetX === 0 && this.tempImageOffsetY === 0) {
       const imgAspect = this.imageLoadedForAdjustment.width / this.imageLoadedForAdjustment.height;
-      const canvasAspect = this.CANVAS_WIDTH / this.CANVAS_HEIGHT;
+      const canvasAspect = canvas.width / canvas.height;
       if (imgAspect > canvasAspect) {
-        this.tempImageScale = this.CANVAS_WIDTH / this.imageLoadedForAdjustment.width;
+        this.tempImageScale = canvas.width / this.imageLoadedForAdjustment.width;
       } else {
-        this.tempImageScale = this.CANVAS_HEIGHT / this.imageLoadedForAdjustment.height;
+        this.tempImageScale = canvas.height / this.imageLoadedForAdjustment.height;
       }
-      this.tempImageOffsetX = (this.CANVAS_WIDTH - this.imageLoadedForAdjustment.width * this.tempImageScale) / 2;
-      this.tempImageOffsetY = (this.CANVAS_HEIGHT - this.imageLoadedForAdjustment.height * this.tempImageScale) / 2;
+      this.tempImageOffsetX = (canvas.width - this.imageLoadedForAdjustment.width * this.tempImageScale) / 2;
+      this.tempImageOffsetY = (canvas.height - this.imageLoadedForAdjustment.height * this.tempImageScale) / 2;
     }
 
     this.drawAdjustmentCanvas();
@@ -379,7 +384,8 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
         finalClipCtx.closePath();
         finalClipCtx.clip();
 
-        const scaleFromModalToFinal = finalClipCanvas.width / this.CANVAS_WIDTH;
+        // Since the adjustment canvas now has the same aspect ratio, we can use a single scale factor
+        const scaleFromModalToFinal = finalClipCanvas.width / this.adjustmentCanvas.nativeElement.width;
         finalClipCtx.translate(finalClipCanvas.width / 2, finalClipCanvas.height / 2);
         finalClipCtx.rotate(imageRotationAngle * Math.PI / 180);
         finalClipCtx.translate(-finalClipCanvas.width / 2, -finalClipCanvas.height / 2);

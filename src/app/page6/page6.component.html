@@ -13,7 +13,7 @@
         </div>
         <div class="model-body">
             <p>{{ boundaryModelContent }}</p>
-    
+
             <div *ngIf="previewImageUrl" class="image-adjustment-container">
                 <h4>Image Adjustment:</h4>
                 <div class="canvas-wrapper">
@@ -24,29 +24,29 @@
                             (mouseleave)="handleCanvasMouseUp($event)"
                             (wheel)="handleCanvasWheel($event)"></canvas>
                 </div>
-    
+
                 <div class="adjustment-controls">
                     <label for="rotation-slider">Rotate:</label>
                     <input type="range" id="rotation-slider" min="0" max="360" [(ngModel)]="tempImageRotationAngle" (input)="drawAdjustmentCanvas()" />
                     <span>{{ tempImageRotationAngle | number:'1.0-0' }}°</span>
                 </div>
             </div>
-            
+
             <div class="model-footer">
                 <ng-container *ngIf="!imageOverlay && !previewImageUrl">
                     <button (click)="triggerImageInput()">Upload Image</button>
                 </ng-container>
-        
+
                 <ng-container *ngIf="previewImageUrl && !imageOverlay">
                     <button (click)="saveAdjustedImageOverlay()">Save Clipped Image</button>
                     <button class="cancel-button" (click)="closeBoundaryModel()">Cancel</button>
                 </ng-container>
-        
+
                 <ng-container *ngIf="imageOverlay && !previewImageUrl">
                     <button (click)="removeImage(); closeBoundaryModel()">Remove Image</button>
                     <button (click)="editExistingImageOverlay()">Edit Image</button>
                 </ng-container>
-                
+
                 <ng-container *ngIf="imageOverlay && previewImageUrl">
                      <button (click)="saveAdjustedImageOverlay()">Save Changes</button>
                      <button class="cancel-button" (click)="closeBoundaryModel()">Cancel</button>
