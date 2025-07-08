@@ -1,10 +1,29 @@
-<div class="map-container" #mapContainer></div>
+<div class="map-wrapper">
+    <!-- This container will hold the map and the edit-mode buttons -->
+    <div class="map-container" #mapContainer></div>
 
-<input type="file" #fileInput (change)="onBoundaryFileSelected($event)" style="display: none;" accept=".json, .geojson">
-<button (click)="triggerFileInput()">Load Boundary GeoJSON</button>
+    <!-- Buttons for Edit Mode -->
+    <div class="map-controls-overlay">
+        <!-- Button to Enter Edit Mode -->
+        <button *ngIf="!isEditingBoundaries && imageOverlay" (click)="startBoundaryEditMode()" class="map-button edit-button">
+            ✏️ Edit Boundaries
+        </button>
 
+        <!-- Container for Save/Cancel buttons, shown only in edit mode -->
+        <div *ngIf="isEditingBoundaries" class="edit-controls-container">
+            <p>You are in edit mode. Modify the boundary on the map using the toolbar.</p>
+            <button (click)="saveBoundaryChanges()" class="map-button save-button">💾 Save Changes</button>
+            <button (click)="cancelBoundaryEdit()" class="map-button cancel-button">❌ Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- Hidden file inputs, they are triggered programmatically -->
 <input type="file" #imageInput (change)="onImageFileSelected($event)" accept="image/*" style="display: none;">
 
+
+<!-- Modal for uploading and adjusting images -->
 <div *ngIf="showBoundaryModel" class="modal-backdrop" (click)="closeBoundaryModel()">
     <div class="boundary-model" (click)="$event.stopPropagation()">
         <div class="model-header">
@@ -14,15 +33,11 @@
         <div class="model-body">
             <p>{{ boundaryModelContent }}</p>
 
+            <!-- Image Adjustment Canvas and Controls -->
             <div *ngIf="previewImageUrl" class="image-adjustment-container">
                 <h4>Image Adjustment:</h4>
                 <div class="canvas-wrapper">
-                    <canvas #adjustmentCanvas id="adjustmentCanvas"
-                            (mousedown)="handleCanvasMouseDown($event)"
-                            (mousemove)="handleCanvasMouseMove($event)"
-                            (mouseup)="handleCanvasMouseUp($event)"
-                            (mouseleave)="handleCanvasMouseUp($event)"
-                            (wheel)="handleCanvasWheel($event)"></canvas>
+                    <canvas #adjustmentCanvas id="adjustmentCanvas" (mousedown)="handleCanvasMouseDown($event)" (mousemove)="handleCanvasMouseMove($event)" (mouseup)="handleCanvasMouseUp($event)" (mouseleave)="handleCanvasMouseUp($event)" (wheel)="handleCanvasWheel($event)"></canvas>
                 </div>
 
                 <div class="adjustment-controls">
@@ -32,6 +47,7 @@
                 </div>
             </div>
 
+            <!-- Modal Footer with Conditional Buttons -->
             <div class="model-footer">
                 <ng-container *ngIf="!imageOverlay && !previewImageUrl">
                     <button (click)="triggerImageInput()">Upload Image</button>
@@ -48,8 +64,8 @@
                 </ng-container>
 
                 <ng-container *ngIf="imageOverlay && previewImageUrl">
-                     <button (click)="saveAdjustedImageOverlay()">Save Changes</button>
-                     <button class="cancel-button" (click)="closeBoundaryModel()">Cancel</button>
+                    <button (click)="saveAdjustedImageOverlay()">Save Changes</button>
+                    <button class="cancel-button" (click)="closeBoundaryModel()">Cancel</button>
                 </ng-container>
             </div>
         </div>

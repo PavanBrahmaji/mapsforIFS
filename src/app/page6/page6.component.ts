@@ -14,7 +14,6 @@ import { CommonModule } from '@angular/common';
 })
 export class Page6Component implements OnInit, AfterViewInit, OnChanges {
   @ViewChild('mapContainer', { static: true }) mapContainer!: ElementRef;
-  @ViewChild('fileInput', { static: false }) fileInput!: ElementRef;
   @ViewChild('adjustmentCanvas', { static: false }) adjustmentCanvas!: ElementRef<HTMLCanvasElement>;
 
   private _imageInput!: ElementRef;
@@ -33,32 +32,38 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
 
   @Output() drawingsChanged = new EventEmitter<any>();
 
+  // Map and Layer Properties
   map!: L.Map;
   drawnItems!: L.FeatureGroup;
   public drawingsGeoJson: any = null;
   private boundaryPolygonLayer?: L.Polygon;
   private boundaryWarning?: HTMLElement;
-
   public imageOverlay?: L.ImageOverlay;
 
+  // Modal and UI State
   public showBoundaryModel: boolean = false;
   public boundaryModelContent: string = '';
   public previewImageUrl: string | ArrayBuffer | null | undefined = null;
+  public isEditingBoundaries: boolean = false; // State for the new edit mode
 
+  // Image Adjustment Properties
   private originalImageFile: File | null = null;
   private imageLoadedForAdjustment: HTMLImageElement | null = null;
-
   private canvasCtx!: CanvasRenderingContext2D;
   public tempImageRotationAngle: number = 0;
   public tempImageScale: number = 1;
   public tempImageOffsetX: number = 0;
   public tempImageOffsetY: number = 0;
 
+  // Canvas Interaction Properties
   private isDragging: boolean = false;
   private lastMouseX: number = 0;
   private lastMouseY: number = 0;
-
   private readonly CANVAS_WIDTH = 400;
+
+  // Leaflet-Draw and Edit Mode Properties
+  private drawControl?: L.Control.Draw;
+  private tempReferenceOverlay?: L.ImageOverlay; // For showing the full image during edit
 
   ngOnInit(): void { }
 
@@ -84,6 +89,34 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
     this.drawnItems = new L.FeatureGroup();
     this.map.addLayer(this.drawnItems);
 
+    // Initialize leaflet-draw controls but don't add them yet
+    this.drawControl = new L.Control.Draw({
+      position: 'topright',
+      draw: {
+        polygon: false, // Disable the add polygon tool
+        polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
+      },
+      edit: {
+        featureGroup: this.drawnItems,
+        remove: true,
+      },
+    });
+
+    // --- Event Handlers for Drawing ---
+    this.map.on(L.Draw.Event.CREATED, (e: any) => {
+      const layer = e.layer;
+      this.drawnItems.clearLayers(); // Ensures only one boundary polygon exists
+      this.drawnItems.addLayer(layer);
+    });
+
+    this.map.on(L.Draw.Event.EDITED, () => {
+      // Logic after a layer is edited. Can be used for validation or logging.
+    });
+
+    this.map.on(L.Draw.Event.DELETED, () => {
+      // Logic after a layer is deleted.
+    });
+
     this.loadPolygonBoundariesFromLocalStorage();
   }
 
@@ -101,18 +134,11 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
     }, 3000);
   }
 
+  // --- Local Storage Helpers ---
   private getSiteData = (): any => JSON.parse(localStorage.getItem('siteData') || '{}');
   private setSiteData = (data: any): void => localStorage.setItem('siteData', JSON.stringify(data));
 
-  public triggerFileInput(): void {
-    if (this.fileInput && this.fileInput.nativeElement) {
-      this.fileInput.nativeElement.click();
-    } else {
-      console.error('fileInput element not found.');
-      this.showBoundaryWarning('Error: Could not trigger file upload.');
-    }
-  }
-
+  // --- File Input Triggers ---
   public triggerImageInput(): void {
     if (this._imageInput && this._imageInput.nativeElement) {
       this._imageInput.nativeElement.click();
@@ -122,59 +148,41 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
-  public onBoundaryFileSelected(event: any): void {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const geoJson = JSON.parse(e.target?.result as string) as FeatureCollection;
-        let siteData = this.getSiteData();
-        siteData.globalVar = geoJson;
-        this.setSiteData(siteData);
-        this.renderBoundaries(geoJson);
-        this.loadOverlayFromLocalStorage();
-      } catch (error) {
-        this.showBoundaryWarning('Invalid GeoJSON file.');
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-  }
-
+  // --- File Selection Handlers ---
   public onImageFileSelected(event: any): void {
     const file = event.target.files[0];
     if (!file) return;
 
     if (!this.boundaryPolygonLayer) {
-        this.showBoundaryWarning('Please load a boundary file first.');
-        event.target.value = '';
-        return;
+      this.showBoundaryWarning('Please load a boundary file first.');
+      event.target.value = '';
+      return;
     }
 
     this.originalImageFile = file;
     const reader = new FileReader();
     reader.onload = (e) => {
-        const imageUrl = e.target?.result as string;
-        let siteData = this.getSiteData();
-        siteData.originalImageUrl = imageUrl;
-        this.setSiteData(siteData);
+      const imageUrl = e.target?.result as string;
+      let siteData = this.getSiteData();
+      siteData.originalImageUrl = imageUrl;
+      this.setSiteData(siteData);
 
-        this.previewImageUrl = imageUrl;
-        this.imageLoadedForAdjustment = new Image();
-        this.imageLoadedForAdjustment.onload = () => {
-            this.tempImageRotationAngle = 0;
-            this.tempImageScale = 1;
-            this.tempImageOffsetX = 0;
-            this.tempImageOffsetY = 0;
-            this.setupImageAdjustmentCanvas();
-        };
-        this.imageLoadedForAdjustment.src = imageUrl;
+      this.previewImageUrl = imageUrl;
+      this.imageLoadedForAdjustment = new Image();
+      this.imageLoadedForAdjustment.onload = () => {
+        this.tempImageRotationAngle = 0;
+        this.tempImageScale = 1;
+        this.tempImageOffsetX = 0;
+        this.tempImageOffsetY = 0;
+        this.setupImageAdjustmentCanvas();
+      };
+      this.imageLoadedForAdjustment.src = imageUrl;
     };
     reader.readAsDataURL(file);
     event.target.value = '';
   }
 
+  // --- Image Adjustment Canvas Logic ---
   private setupImageAdjustmentCanvas(): void {
     if (!this.adjustmentCanvas || !this.imageLoadedForAdjustment || !this.boundaryPolygonLayer) {
       setTimeout(() => this.setupImageAdjustmentCanvas(), 50);
@@ -288,6 +296,7 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
     this.drawAdjustmentCanvas();
   }
 
+  // --- Image Clipping and Saving ---
   public async saveAdjustedImageOverlay(): Promise<void> {
     const siteData = this.getSiteData();
     const imageToClipSrc = siteData.originalImageUrl;
@@ -334,12 +343,12 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
   }
 
   private loadImage(src: string): Promise<HTMLImageElement> {
-      return new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = reject;
-          img.src = src;
-      });
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
   }
 
   private clipImageToPolygon(
@@ -351,58 +360,58 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
     imageRotationAngle: number
   ): Promise<string> {
     return new Promise((resolve, reject) => {
-        const finalClipCanvas = document.createElement('canvas');
-        const finalClipCtx = finalClipCanvas.getContext('2d');
-        if (!finalClipCtx) {
-            return reject('Could not get 2D canvas context for final clipping.');
-        }
+      const finalClipCanvas = document.createElement('canvas');
+      const finalClipCtx = finalClipCanvas.getContext('2d');
+      if (!finalClipCtx) {
+        return reject('Could not get 2D canvas context for final clipping.');
+      }
 
-        const polygonBounds = polygonLayer.getBounds();
-        const mapWidthDegrees = polygonBounds.getEast() - polygonBounds.getWest();
-        const mapHeightDegrees = polygonBounds.getNorth() - polygonBounds.getSouth();
-        const aspectRatio = mapWidthDegrees / mapHeightDegrees;
+      const polygonBounds = polygonLayer.getBounds();
+      const mapWidthDegrees = polygonBounds.getEast() - polygonBounds.getWest();
+      const mapHeightDegrees = polygonBounds.getNorth() - polygonBounds.getSouth();
+      const aspectRatio = mapWidthDegrees / mapHeightDegrees;
 
-        finalClipCanvas.width = 1024;
-        finalClipCanvas.height = Math.round(finalClipCanvas.width / aspectRatio);
+      finalClipCanvas.width = 1024;
+      finalClipCanvas.height = Math.round(finalClipCanvas.width / aspectRatio);
 
-        finalClipCtx.save();
-        const polygonLatLngs = polygonLayer.getLatLngs()[0] as L.LatLng[];
-        if (!polygonLatLngs || polygonLatLngs.length === 0) {
-            finalClipCtx.restore();
-            return reject('Polygon has no valid coordinates for clipping.');
-        }
-
-        finalClipCtx.beginPath();
-        polygonLatLngs.forEach((latlng, index) => {
-            const normalizedX = (latlng.lng - polygonBounds.getWest()) / mapWidthDegrees;
-            const normalizedY = (polygonBounds.getNorth() - latlng.lat) / mapHeightDegrees;
-            const pixelX = normalizedX * finalClipCanvas.width;
-            const pixelY = normalizedY * finalClipCanvas.height;
-            if (index === 0) finalClipCtx.moveTo(pixelX, pixelY);
-            else finalClipCtx.lineTo(pixelX, pixelY);
-        });
-        finalClipCtx.closePath();
-        finalClipCtx.clip();
-
-        // Since the adjustment canvas now has the same aspect ratio, we can use a single scale factor
-        const scaleFromModalToFinal = finalClipCanvas.width / this.adjustmentCanvas.nativeElement.width;
-        finalClipCtx.translate(finalClipCanvas.width / 2, finalClipCanvas.height / 2);
-        finalClipCtx.rotate(imageRotationAngle * Math.PI / 180);
-        finalClipCtx.translate(-finalClipCanvas.width / 2, -finalClipCanvas.height / 2);
-
-        finalClipCtx.drawImage(
-            originalImageElement,
-            imageOffsetX * scaleFromModalToFinal,
-            imageOffsetY * scaleFromModalToFinal,
-            originalImageElement.width * imageScale * scaleFromModalToFinal,
-            originalImageElement.height * imageScale * scaleFromModalToFinal
-        );
-
+      finalClipCtx.save();
+      const polygonLatLngs = polygonLayer.getLatLngs()[0] as L.LatLng[];
+      if (!polygonLatLngs || polygonLatLngs.length === 0) {
         finalClipCtx.restore();
-        resolve(finalClipCanvas.toDataURL('image/png'));
+        return reject('Polygon has no valid coordinates for clipping.');
+      }
+
+      finalClipCtx.beginPath();
+      polygonLatLngs.forEach((latlng, index) => {
+        const normalizedX = (latlng.lng - polygonBounds.getWest()) / mapWidthDegrees;
+        const normalizedY = (polygonBounds.getNorth() - latlng.lat) / mapHeightDegrees;
+        const pixelX = normalizedX * finalClipCanvas.width;
+        const pixelY = normalizedY * finalClipCanvas.height;
+        if (index === 0) finalClipCtx.moveTo(pixelX, pixelY);
+        else finalClipCtx.lineTo(pixelX, pixelY);
+      });
+      finalClipCtx.closePath();
+      finalClipCtx.clip();
+
+      const scaleFromModalToFinal = this.adjustmentCanvas ? finalClipCanvas.width / this.adjustmentCanvas.nativeElement.width : 1;
+      finalClipCtx.translate(finalClipCanvas.width / 2, finalClipCanvas.height / 2);
+      finalClipCtx.rotate(imageRotationAngle * Math.PI / 180);
+      finalClipCtx.translate(-finalClipCanvas.width / 2, -finalClipCanvas.height / 2);
+
+      finalClipCtx.drawImage(
+        originalImageElement,
+        imageOffsetX * scaleFromModalToFinal,
+        imageOffsetY * scaleFromModalToFinal,
+        originalImageElement.width * imageScale * scaleFromModalToFinal,
+        originalImageElement.height * imageScale * scaleFromModalToFinal
+      );
+
+      finalClipCtx.restore();
+      resolve(finalClipCanvas.toDataURL('image/png'));
     });
   }
 
+  // --- Boundary Rendering and Loading ---
   public renderBoundaries(geoJson: FeatureCollection): void {
     this.drawnItems.clearLayers();
     this.boundaryPolygonLayer = undefined;
@@ -459,6 +468,7 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
     }
   }
 
+  // --- Image Removal ---
   public removeImage(): void {
     if (this.imageOverlay) {
       this.imageOverlay.off('click');
@@ -482,7 +492,9 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
     this.tempImageOffsetY = 0;
   }
 
+  // --- Modal Management ---
   public openBoundaryModel(): void {
+    if (this.isEditingBoundaries) return; // Don't open modal if already in edit mode
     const siteData = this.getSiteData();
     if (siteData.imageOverlayUrl) {
       this.boundaryModelContent = 'Image overlay is currently active for this boundary.';
@@ -508,24 +520,110 @@ export class Page6Component implements OnInit, AfterViewInit, OnChanges {
   public async editExistingImageOverlay(): Promise<void> {
     const siteData = this.getSiteData();
     if (siteData.originalImageUrl && this.boundaryPolygonLayer) {
-        try {
-            this.boundaryModelContent = 'Adjust existing image overlay.';
-            this.previewImageUrl = siteData.originalImageUrl;
-            this.imageLoadedForAdjustment = await this.loadImage(siteData.originalImageUrl);
+      try {
+        this.boundaryModelContent = 'Adjust existing image overlay.';
+        this.previewImageUrl = siteData.originalImageUrl;
+        this.imageLoadedForAdjustment = await this.loadImage(siteData.originalImageUrl);
 
-            this.tempImageRotationAngle = siteData.imageRotationAngle || 0;
-            this.tempImageScale = siteData.imageScale || 1;
-            this.tempImageOffsetX = siteData.imageOffsetX || 0;
-            this.tempImageOffsetY = siteData.imageOffsetY || 0;
+        this.tempImageRotationAngle = siteData.imageRotationAngle || 0;
+        this.tempImageScale = siteData.imageScale || 1;
+        this.tempImageOffsetX = siteData.imageOffsetX || 0;
+        this.tempImageOffsetY = siteData.imageOffsetY || 0;
 
-            this.setupImageAdjustmentCanvas();
-        } catch (error) {
-            this.showBoundaryWarning('Could not load original image for editing.');
-            console.error(error);
-        }
+        this.setupImageAdjustmentCanvas();
+      } catch (error) {
+        this.showBoundaryWarning('Could not load original image for editing.');
+        console.error(error);
+      }
     } else {
-        this.showBoundaryWarning('No original image found to edit.');
-        this.closeBoundaryModel();
+      this.showBoundaryWarning('No original image found to edit.');
+      this.closeBoundaryModel();
     }
+  }
+
+  // --- NEW: Boundary Editing Workflow ---
+
+  public startBoundaryEditMode(): void {
+    const siteData = this.getSiteData();
+    if (!siteData.originalImageUrl || !this.boundaryPolygonLayer) {
+      this.showBoundaryWarning('Cannot edit without an original image and boundary.');
+      return;
+    }
+
+    this.isEditingBoundaries = true;
+    this.closeBoundaryModel(); // Close the modal if it's open
+
+    // 1. Add the full original image as a transparent reference layer
+    const bounds = this.boundaryPolygonLayer.getBounds();
+    this.tempReferenceOverlay = L.imageOverlay(siteData.originalImageUrl, bounds, {
+      opacity: 0.5,
+      interactive: false,
+    }).addTo(this.map);
+    this.tempReferenceOverlay.bringToBack();
+
+    // 2. Hide the main clipped overlay to avoid confusion
+    if (this.imageOverlay) {
+      this.imageOverlay.remove();
+    }
+
+    // 3. Add the drawing controls to the map
+    if (this.drawControl) {
+      this.map.addControl(this.drawControl);
+    }
+  }
+
+  public async saveBoundaryChanges(): Promise<void> {
+    if (this.drawnItems.getLayers().length === 0) {
+      this.showBoundaryWarning('No boundary drawn. Cannot save.');
+      return;
+    }
+
+    const newBoundaryLayer = this.drawnItems.getLayers()[0] as L.Polygon;
+    const newGeoJson = this.drawnItems.toGeoJSON() as FeatureCollection;
+
+    const siteData = this.getSiteData();
+    if (!siteData.originalImageUrl) {
+        this.showBoundaryWarning('Original image not found. Cannot re-clip.');
+        return;
+    }
+    
+    this.showBoundaryWarning('Re-clipping image with new boundary...');
+
+    const imageElement = await this.loadImage(siteData.originalImageUrl);
+    const clippedImageUrl = await this.clipImageToPolygon(
+        imageElement,
+        newBoundaryLayer,
+        siteData.imageScale || 1,
+        siteData.imageOffsetX || 0,
+        siteData.imageOffsetY || 0,
+        siteData.imageRotationAngle || 0
+    );
+
+    siteData.globalVar = newGeoJson;
+    siteData.imageOverlayUrl = clippedImageUrl;
+    this.setSiteData(siteData);
+
+    this.exitEditMode(true);
+    this.showBoundaryWarning('Boundary and image updated successfully.');
+  }
+
+  public cancelBoundaryEdit(): void {
+    this.exitEditMode(false);
+  }
+
+  private exitEditMode(wasSaved: boolean): void {
+    this.isEditingBoundaries = false;
+
+    if (this.tempReferenceOverlay) {
+      this.tempReferenceOverlay.remove();
+      this.tempReferenceOverlay = undefined;
+    }
+
+    if (this.drawControl) {
+      this.drawControl.remove();
+    }
+    
+    // Reload the map state from local storage to show the final result
+    this.loadPolygonBoundariesFromLocalStorage();
   }
 }
