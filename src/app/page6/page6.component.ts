@@ -1,9 +1,10 @@
-import { Component, ViewChild, ElementRef, Input, OnInit, AfterViewInit, Renderer2, ChangeDetectorRef } from '@angular/core';
+import { Component, ViewChild, ElementRef, Input, OnInit, AfterViewInit, Renderer2, ChangeDetectorRef, inject } from '@angular/core';
 import * as L from 'leaflet';
 import 'leaflet-draw';
 import type { FeatureCollection, Feature } from 'geojson';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ApiService } from '../services/api.service';
 
 // Type declaration for the Leaflet.ImageOverlay.Rotated plugin
 declare global {
@@ -25,6 +26,19 @@ declare global {
     }
 }
 
+interface SiteData {
+    site: string;
+    globalVar: FeatureCollection;
+    selectedLocations: any[];
+    imageData?: {
+        imageFileName: string; // Stores the unique name from the server
+        imageScale: number;
+        imageRotation: number;
+        imageAspectRatio: number;
+        imageCenter?: { lat: number; lng: number };
+    };
+}
+
 @Component({
     selector: 'app-interactive-image-overlay',
     standalone: true,
@@ -36,31 +50,48 @@ export class Page6Component implements OnInit, AfterViewInit {
     @ViewChild('mapContainer', { static: true }) mapContainer!: ElementRef;
     @ViewChild('imageInput', { static: false }) imageInput!: ElementRef;
 
-    @Input() lat: number = 20.5937; // Centered on India
+    @Input() lat: number = 20.5937;
     @Input() lon: number = 78.9629;
 
     map!: L.Map;
     drawnItems!: L.FeatureGroup;
-    private boundaryPolygonLayer?: L.Polygon;
+    public boundaryPolygonLayer?: L.Polygon;
     public imageOverlay?: L.ImageOverlay.Rotated;
 
-    // Image state
     public imageScale: number = 1;
     public imageRotation: number = 0;
     private imageCenter: L.LatLng | null = null;
     private originalImageUrl: string = '';
     private imageAspectRatio: number = 1;
+    private imageFileName: string = '';
+    private serverUrl = 'http://localhost:3000';
 
-    constructor(private renderer: Renderer2, private cdr: ChangeDetectorRef) {}
+    public isSaving: boolean = false;
+    public saveMessage: string = '';
+    public siteData: SiteData | null = null;
+    
+    // ⬇️ **MODIFICATION 1: Add a property to hold the script loading promise**
+    private pluginReady!: Promise<void>;
 
+    private renderer = inject(Renderer2);
+    private cdr = inject(ChangeDetectorRef);
+    private apiService = inject(ApiService);
+
+    // ⬇️ **MODIFICATION 2: Assign the promise in ngOnInit**
     ngOnInit(): void {
-        this.loadScript('https://unpkg.com/leaflet-imageoverlay-rotated@0.1.4/Leaflet.ImageOverlay.Rotated.js')
-            .catch(err => console.error("Could not load Leaflet.ImageOverlay.Rotated plugin", err));
+        this.pluginReady = this.loadScript('https://unpkg.com/leaflet-imageoverlay-rotated@0.1.4/Leaflet.ImageOverlay.Rotated.js');
+        this.pluginReady.catch(err => console.error("Could not load Leaflet.ImageOverlay.Rotated plugin", err));
     }
 
-    ngAfterViewInit(): void {
-        this.initializeMap();
-        this.loadStateFromLocalStorage();
+    // ⬇️ **MODIFICATION 3: Await the promise in ngAfterViewInit**
+    async ngAfterViewInit(): Promise<void> {
+        try {
+            await this.pluginReady; // Wait for the plugin script to finish loading
+            this.initializeMap();
+            this.loadStateFromLocalStorage();
+        } catch (error) {
+            console.error("Plugin failed to load, cannot initialize the map.", error);
+        }
     }
 
     private initializeMap(): void {
@@ -76,7 +107,7 @@ export class Page6Component implements OnInit, AfterViewInit {
         const drawControl = new L.Control.Draw({
             position: 'topleft',
             draw: {
-                polygon: { allowIntersection: false, shapeOptions: { color: '#CC00EC' } },
+                polygon: false,
                 polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
             },
             edit: { featureGroup: this.drawnItems, remove: true },
@@ -92,39 +123,27 @@ export class Page6Component implements OnInit, AfterViewInit {
                 this.drawnItems.addLayer(layer);
                 this.boundaryPolygonLayer = layer;
                 this.setupBoundaryInteraction(layer);
-                this.saveStateToLocalStorage();
+                this.autoSaveState();
             }
         });
 
-        // **MODIFIED**: This handler now keeps the image static during boundary edits.
-        this.map.on(L.Draw.Event.EDITED, (e: any) => {
-            const layers = e.layers;
-            layers.eachLayer((layer: any) => {
-                if (layer instanceof L.Polygon) {
-                    // Update the component's reference to the edited layer
-                    this.boundaryPolygonLayer = layer;
-                }
-            });
-            
-            // Simply save the state. The image properties are not changed,
-            // so the image will remain static on the map.
-            this.saveStateToLocalStorage();
+        this.map.on(L.Draw.Event.EDITED, () => {
+             this.autoSaveState();
         });
 
         this.map.on(L.Draw.Event.DELETED, () => {
             this.boundaryPolygonLayer = undefined;
             this.removeImage();
-            this.saveStateToLocalStorage();
+            this.autoSaveState();
         });
     }
 
     private setupBoundaryInteraction(layer: L.Polygon): void {
         layer.on('click', () => {
-            if (!this.imageOverlay) {
+            if (!this.imageOverlay && this.imageInput?.nativeElement) {
                 this.imageInput.nativeElement.click();
             }
         });
-        
         const element = layer.getElement();
         if (element) {
             (element as HTMLElement).style.cursor = 'pointer';
@@ -132,28 +151,33 @@ export class Page6Component implements OnInit, AfterViewInit {
     }
 
     public onImageFileSelected(event: any): void {
-        const file = event.target.files[0];
+        const file = event.target?.files?.[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            this.originalImageUrl = e.target?.result as string;
-            const img = new Image();
-            img.onload = () => {
-                this.imageAspectRatio = img.naturalWidth / img.naturalHeight;
-                this.createImageOverlay();
-                this.saveStateToLocalStorage();
-            };
-            img.src = this.originalImageUrl;
-        };
-        reader.readAsDataURL(file);
-        event.target.value = '';
+        this.apiService.uploadImage(file).subscribe({
+            next: (response) => {
+                this.originalImageUrl = `${this.serverUrl}${response.url}`;
+                this.imageFileName = response.url.split('/').pop() || '';
+
+                const img = new Image();
+                img.onload = () => {
+                    this.imageAspectRatio = img.naturalWidth / img.naturalHeight;
+                    this.createImageOverlay();
+                    this.autoSaveState();
+                };
+                img.onerror = () => console.error("Could not load the uploaded image.");
+                img.src = this.originalImageUrl;
+            },
+            error: (err) => console.error('Upload failed', err)
+        });
+
+        if (event.target) event.target.value = '';
     }
 
     private createImageOverlay(): void {
         if (!this.boundaryPolygonLayer || !this.originalImageUrl) return;
         if (this.imageOverlay) this.imageOverlay.remove();
-        
+
         this.imageCenter = this.boundaryPolygonLayer.getBounds().getCenter();
         const corners = this.calculateImageCorners();
 
@@ -164,15 +188,10 @@ export class Page6Component implements OnInit, AfterViewInit {
             corners.bottomleft,
             { opacity: 0.8, interactive: true }
         ).addTo(this.map);
-        
-        const element = this.boundaryPolygonLayer.getElement();
-        if (element) {
-            (element as HTMLElement).style.cursor = 'default';
-        }
     }
 
     private calculateImageCorners(): { topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng } {
-        if (!this.imageCenter || !this.boundaryPolygonLayer) throw new Error("Missing data for calculation");
+        if (!this.imageCenter || !this.boundaryPolygonLayer) throw new Error("Missing data for corner calculation");
 
         const bounds = this.boundaryPolygonLayer.getBounds();
         const boundaryWidth = bounds.getEast() - bounds.getWest();
@@ -180,7 +199,6 @@ export class Page6Component implements OnInit, AfterViewInit {
         const boundaryAspectRatio = boundaryWidth / boundaryHeight;
 
         let imageWidthDegrees, imageHeightDegrees;
-
         if (boundaryAspectRatio > this.imageAspectRatio) {
             imageHeightDegrees = boundaryHeight;
             imageWidthDegrees = imageHeightDegrees * this.imageAspectRatio;
@@ -201,25 +219,22 @@ export class Page6Component implements OnInit, AfterViewInit {
 
         const angleRad = this.imageRotation * (Math.PI / 180);
         const rotatePoint = (point: L.LatLng) => {
-            const dx = point.lng - this.imageCenter!.lng;
-            const dy = point.lat - this.imageCenter!.lat;
-            const newLng = this.imageCenter!.lng + (dx * Math.cos(angleRad) - dy * Math.sin(angleRad));
-            const newLat = this.imageCenter!.lat + (dx * Math.sin(angleRad) + dy * Math.cos(angleRad));
+            if (!this.imageCenter) return point;
+            const dx = point.lng - this.imageCenter.lng;
+            const dy = point.lat - this.imageCenter.lat;
+            const newLng = this.imageCenter.lng + (dx * Math.cos(angleRad) - dy * Math.sin(angleRad));
+            const newLat = this.imageCenter.lat + (dx * Math.sin(angleRad) + dy * Math.cos(angleRad));
             return L.latLng(newLat, newLng);
         };
         
-        if (this.imageRotation !== 0) {
-            return { topleft: rotatePoint(topleft), topright: rotatePoint(topright), bottomleft: rotatePoint(bottomleft) };
-        }
-
-        return { topleft, topright, bottomleft };
+        return { topleft: rotatePoint(topleft), topright: rotatePoint(topright), bottomleft: rotatePoint(bottomleft) };
     }
     
     public updateImageTransform(): void {
-        if (!this.imageOverlay) return;
+        if (!this.imageOverlay || !this.imageCenter) return;
         const corners = this.calculateImageCorners();
         this.imageOverlay.reposition(corners.topleft, corners.topright, corners.bottomleft);
-        this.saveStateToLocalStorage();
+        this.autoSaveState();
     }
     
     public removeImage(): void {
@@ -228,54 +243,88 @@ export class Page6Component implements OnInit, AfterViewInit {
             this.imageOverlay = undefined;
         }
         this.originalImageUrl = '';
-        this.imageScale = 1;
-        this.imageRotation = 0;
-        
-        if (this.boundaryPolygonLayer) {
-            const element = this.boundaryPolygonLayer.getElement();
-            if (element) {
-                (element as HTMLElement).style.cursor = 'pointer';
-            }
-        }
-        
-        this.saveStateToLocalStorage();
+        this.imageFileName = '';
+        this.autoSaveState();
     }
-    
-    private saveStateToLocalStorage(): void {
-        const state = {
-            boundary: this.boundaryPolygonLayer ? this.drawnItems.toGeoJSON() : null,
-            imageUrl: this.originalImageUrl,
-            imageScale: this.imageScale,
-            imageRotation: this.imageRotation,
-            imageAspectRatio: this.imageAspectRatio
+
+    private autoSaveState(): void {
+        try {
+            const currentSiteData = this.getCurrentSiteData();
+            localStorage.setItem('siteData', JSON.stringify(currentSiteData));
+        } catch (error) {
+            console.error('Error auto-saving state:', error);
+        }
+    }
+
+    private getCurrentSiteData(): SiteData {
+        const siteData: SiteData = {
+            site: "international",
+            globalVar: { type: "FeatureCollection", features: [] },
+            selectedLocations: []
         };
-        localStorage.setItem('mapImageState', JSON.stringify(state));
+
+        if (this.boundaryPolygonLayer) {
+            siteData.globalVar.features.push(this.boundaryPolygonLayer.toGeoJSON() as Feature);
+        }
+
+        if (this.imageFileName && this.imageCenter) {
+            siteData.imageData = {
+                imageFileName: this.imageFileName,
+                imageScale: this.imageScale,
+                imageRotation: this.imageRotation,
+                imageAspectRatio: this.imageAspectRatio,
+                imageCenter: { lat: this.imageCenter.lat, lng: this.imageCenter.lng }
+            };
+        }
+        return siteData;
     }
 
     private loadStateFromLocalStorage(): void {
-        const stateString = localStorage.getItem('mapImageState');
-        if (!stateString) return;
+        const siteDataString = localStorage.getItem('siteData');
+        if (!siteDataString) return;
         
-        const state = JSON.parse(stateString);
-
-        if (state.boundary) {
-            const geoJsonLayer = L.geoJSON(state.boundary);
-            geoJsonLayer.eachLayer((layer: any) => {
-                if (layer instanceof L.Polygon) {
+        try {
+            this.siteData = JSON.parse(siteDataString);
+            
+            if (this.siteData?.globalVar?.features) {
+                const polygonFeature = this.siteData.globalVar.features.find(f => f.geometry?.type === 'Polygon');
+                if (polygonFeature) {
+                    const layer = L.geoJSON(polygonFeature).getLayers()[0] as L.Polygon;
                     this.drawnItems.addLayer(layer);
                     this.boundaryPolygonLayer = layer;
                     this.setupBoundaryInteraction(layer);
                     this.map.fitBounds(layer.getBounds());
                 }
-            });
-        }
+            }
 
-        if (state.imageUrl && this.boundaryPolygonLayer) {
-            this.originalImageUrl = state.imageUrl;
-            this.imageScale = state.imageScale || 1;
-            this.imageRotation = state.imageRotation || 0;
-            this.imageAspectRatio = state.imageAspectRatio || 1;
-            this.createImageOverlay();
+            if (this.siteData?.imageData?.imageFileName && this.boundaryPolygonLayer) {
+                const imageData = this.siteData.imageData;
+                this.imageScale = imageData.imageScale;
+                this.imageRotation = imageData.imageRotation;
+                this.imageAspectRatio = imageData.imageAspectRatio;
+                this.imageFileName = imageData.imageFileName;
+                if (imageData.imageCenter) {
+                    this.imageCenter = L.latLng(imageData.imageCenter.lat, imageData.imageCenter.lng);
+                }
+
+                this.originalImageUrl = `${this.serverUrl}/images/${this.imageFileName}`;
+                const img = new Image();
+                img.onload = () => {
+                    this.createImageOverlay();
+                    this.cdr.detectChanges();
+                };
+                img.onerror = () => console.error(`Failed to reload image: ${this.originalImageUrl}`);
+                img.src = this.originalImageUrl;
+            }
+        } catch (error) {
+            console.error('Error loading state from localStorage:', error);
+        }
+    }
+
+    public resetMap(): void {
+        if (confirm('Are you sure you want to reset the map?')) {
+            localStorage.removeItem('siteData');
+            window.location.reload();
         }
     }
 
