@@ -12,6 +12,7 @@ declare global {
         namespace ImageOverlay {
             interface Rotated extends L.ImageOverlay {
                 reposition(topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng): void;
+                setOpacity(opacity: number): this; // Ensure setOpacity is declared
             }
         }
         namespace imageOverlay {
@@ -31,11 +32,12 @@ interface SiteData {
     globalVar: FeatureCollection;
     selectedLocations: any[];
     imageData?: {
-        imageFileName: string; // Stores the unique name from the server
+        imageFileName: string;
         imageScale: number;
         imageRotation: number;
         imageAspectRatio: number;
         imageCenter?: { lat: number; lng: number };
+        imageOpacity?: number; // ⬇️ **MODIFICATION: Add opacity to saved data**
     };
 }
 
@@ -60,6 +62,9 @@ export class Page6Component implements OnInit, AfterViewInit {
 
     public imageScale: number = 1;
     public imageRotation: number = 0;
+    // ⬇️ **MODIFICATION: Add property for opacity control**
+    public imageOpacity: number = 0.8; 
+
     private imageCenter: L.LatLng | null = null;
     private originalImageUrl: string = '';
     private imageAspectRatio: number = 1;
@@ -70,23 +75,24 @@ export class Page6Component implements OnInit, AfterViewInit {
     public saveMessage: string = '';
     public siteData: SiteData | null = null;
     
-    // ⬇️ **MODIFICATION 1: Add a property to hold the script loading promise**
     private pluginReady!: Promise<void>;
+
+    private isDragging: boolean = false;
+    private dragStartLatLng: L.LatLng | null = null;
+    private dragStartCenter: L.LatLng | null = null;
 
     private renderer = inject(Renderer2);
     private cdr = inject(ChangeDetectorRef);
     private apiService = inject(ApiService);
 
-    // ⬇️ **MODIFICATION 2: Assign the promise in ngOnInit**
     ngOnInit(): void {
         this.pluginReady = this.loadScript('https://unpkg.com/leaflet-imageoverlay-rotated@0.1.4/Leaflet.ImageOverlay.Rotated.js');
         this.pluginReady.catch(err => console.error("Could not load Leaflet.ImageOverlay.Rotated plugin", err));
     }
 
-    // ⬇️ **MODIFICATION 3: Await the promise in ngAfterViewInit**
     async ngAfterViewInit(): Promise<void> {
         try {
-            await this.pluginReady; // Wait for the plugin script to finish loading
+            await this.pluginReady; 
             this.initializeMap();
             this.loadStateFromLocalStorage();
         } catch (error) {
@@ -108,9 +114,13 @@ export class Page6Component implements OnInit, AfterViewInit {
             position: 'topleft',
             draw: {
                 polygon: false,
-                polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
+                polyline: false, 
+                rectangle: false, 
+                circle: false, 
+                marker: false, 
+                circlemarker: false,
             },
-            edit: { featureGroup: this.drawnItems, remove: true },
+            edit: { featureGroup: this.drawnItems, remove: false },
         });
         this.map.addControl(drawControl);
     }
@@ -178,7 +188,7 @@ export class Page6Component implements OnInit, AfterViewInit {
         if (!this.boundaryPolygonLayer || !this.originalImageUrl) return;
         if (this.imageOverlay) this.imageOverlay.remove();
 
-        this.imageCenter = this.boundaryPolygonLayer.getBounds().getCenter();
+        this.imageCenter = this.imageCenter || this.boundaryPolygonLayer.getBounds().getCenter();
         const corners = this.calculateImageCorners();
 
         this.imageOverlay = L.imageOverlay.rotated(
@@ -186,8 +196,11 @@ export class Page6Component implements OnInit, AfterViewInit {
             corners.topleft,
             corners.topright,
             corners.bottomleft,
-            { opacity: 0.8, interactive: true }
+            // ⬇️ **MODIFICATION: Use the component property for opacity**
+            { opacity: this.imageOpacity, interactive: true } 
         ).addTo(this.map);
+
+        this.setupImageDrag();
     }
 
     private calculateImageCorners(): { topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng } {
@@ -234,6 +247,56 @@ export class Page6Component implements OnInit, AfterViewInit {
         if (!this.imageOverlay || !this.imageCenter) return;
         const corners = this.calculateImageCorners();
         this.imageOverlay.reposition(corners.topleft, corners.topright, corners.bottomleft);
+    }
+    
+    // ⬇️ **NEW: Method to handle opacity change from slider**
+    public onOpacityChange(): void {
+        if (this.imageOverlay) {
+            this.imageOverlay.setOpacity(this.imageOpacity);
+            this.autoSaveState();
+        }
+    }
+
+    private setupImageDrag(): void {
+        if (!this.imageOverlay) return;
+        this.imageOverlay.on('mousedown', (e: any) => {
+            e.originalEvent.preventDefault();
+
+            this.isDragging = true;
+            this.dragStartLatLng = e.latlng;
+            this.dragStartCenter = this.imageCenter ? L.latLng(this.imageCenter.lat, this.imageCenter.lng) : null;
+
+            this.map.dragging.disable();
+            this.map.getContainer().style.cursor = 'move';
+
+            this.map.on('mousemove', this.onImageDrag, this);
+            this.map.on('mouseup', this.onImageDragEnd, this);
+        });
+    }
+
+    private onImageDrag(e: any): void {
+        if (!this.isDragging || !this.dragStartLatLng || !this.dragStartCenter) return;
+
+        const newLatLng = e.latlng;
+        const latDelta = newLatLng.lat - this.dragStartLatLng.lat;
+        const lngDelta = newLatLng.lng - this.dragStartLatLng.lng;
+
+        this.imageCenter = L.latLng(this.dragStartCenter.lat + latDelta, this.dragStartCenter.lng + lngDelta);
+        
+        this.updateImageTransform();
+    }
+
+    private onImageDragEnd(): void {
+        if (!this.isDragging) return;
+
+        this.isDragging = false;
+        
+        this.map.dragging.enable();
+        this.map.getContainer().style.cursor = '';
+
+        this.map.off('mousemove', this.onImageDrag, this);
+        this.map.off('mouseup', this.onImageDragEnd, this);
+
         this.autoSaveState();
     }
     
@@ -244,11 +307,14 @@ export class Page6Component implements OnInit, AfterViewInit {
         }
         this.originalImageUrl = '';
         this.imageFileName = '';
+        this.imageCenter = null;
         this.autoSaveState();
     }
 
-    private autoSaveState(): void {
+    public autoSaveState(): void {
         try {
+            if (this.imageOverlay) this.updateImageTransform(); 
+            
             const currentSiteData = this.getCurrentSiteData();
             localStorage.setItem('siteData', JSON.stringify(currentSiteData));
         } catch (error) {
@@ -273,7 +339,9 @@ export class Page6Component implements OnInit, AfterViewInit {
                 imageScale: this.imageScale,
                 imageRotation: this.imageRotation,
                 imageAspectRatio: this.imageAspectRatio,
-                imageCenter: { lat: this.imageCenter.lat, lng: this.imageCenter.lng }
+                imageCenter: { lat: this.imageCenter.lat, lng: this.imageCenter.lng },
+                // ⬇️ **MODIFICATION: Save the current opacity value**
+                imageOpacity: this.imageOpacity
             };
         }
         return siteData;
@@ -297,12 +365,16 @@ export class Page6Component implements OnInit, AfterViewInit {
                 }
             }
 
-            if (this.siteData?.imageData?.imageFileName && this.boundaryPolygonLayer) {
+            if (this.siteData?.imageData?.imageFileName) {
                 const imageData = this.siteData.imageData;
                 this.imageScale = imageData.imageScale;
                 this.imageRotation = imageData.imageRotation;
                 this.imageAspectRatio = imageData.imageAspectRatio;
                 this.imageFileName = imageData.imageFileName;
+
+                // ⬇️ **MODIFICATION: Load the saved opacity or use a default**
+                this.imageOpacity = typeof imageData.imageOpacity === 'number' ? imageData.imageOpacity : 0.8;
+
                 if (imageData.imageCenter) {
                     this.imageCenter = L.latLng(imageData.imageCenter.lat, imageData.imageCenter.lng);
                 }
