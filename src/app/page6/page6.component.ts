@@ -12,7 +12,7 @@ declare global {
         namespace ImageOverlay {
             interface Rotated extends L.ImageOverlay {
                 reposition(topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng): void;
-                setOpacity(opacity: number): this; // Ensure setOpacity is declared
+                setOpacity(opacity: number): this;
             }
         }
         namespace imageOverlay {
@@ -37,7 +37,7 @@ interface SiteData {
         imageRotation: number;
         imageAspectRatio: number;
         imageCenter?: { lat: number; lng: number };
-        imageOpacity?: number; // ⬇️ **MODIFICATION: Add opacity to saved data**
+        imageOpacity?: number;
     };
 }
 
@@ -62,10 +62,12 @@ export class Page6Component implements OnInit, AfterViewInit {
 
     public imageScale: number = 1;
     public imageRotation: number = 0;
-    // ⬇️ **MODIFICATION: Add property for opacity control**
-    public imageOpacity: number = 0.8; 
+    public imageOpacity: number = 0.8;
+    
+    // Modal control
+    public showControlsModal: boolean = false;
 
-    private imageCenter: L.LatLng | null = null;
+    public imageCenter: L.LatLng | null = null;
     private originalImageUrl: string = '';
     private imageAspectRatio: number = 1;
     private imageFileName: string = '';
@@ -174,6 +176,8 @@ export class Page6Component implements OnInit, AfterViewInit {
                     this.imageAspectRatio = img.naturalWidth / img.naturalHeight;
                     this.createImageOverlay();
                     this.autoSaveState();
+                    // Show controls modal when image is loaded
+                    this.showControlsModal = true;
                 };
                 img.onerror = () => console.error("Could not load the uploaded image.");
                 img.src = this.originalImageUrl;
@@ -196,8 +200,7 @@ export class Page6Component implements OnInit, AfterViewInit {
             corners.topleft,
             corners.topright,
             corners.bottomleft,
-            // ⬇️ **MODIFICATION: Use the component property for opacity**
-            { opacity: this.imageOpacity, interactive: true } 
+            { opacity: this.imageOpacity, interactive: true }
         ).addTo(this.map);
 
         this.setupImageDrag();
@@ -247,14 +250,33 @@ export class Page6Component implements OnInit, AfterViewInit {
         if (!this.imageOverlay || !this.imageCenter) return;
         const corners = this.calculateImageCorners();
         this.imageOverlay.reposition(corners.topleft, corners.topright, corners.bottomleft);
+        // Auto-save after transform to persist image location
+        this.autoSaveState();
     }
     
-    // ⬇️ **NEW: Method to handle opacity change from slider**
     public onOpacityChange(): void {
         if (this.imageOverlay) {
             this.imageOverlay.setOpacity(this.imageOpacity);
             this.autoSaveState();
         }
+    }
+
+    public onScaleChange(): void {
+        this.updateImageTransform();
+    }
+
+    public onRotationChange(): void {
+        this.updateImageTransform();
+    }
+
+    // Toggle controls modal
+    public toggleControlsModal(): void {
+        this.showControlsModal = !this.showControlsModal;
+    }
+
+    // Close modal
+    public closeControlsModal(): void {
+        this.showControlsModal = false;
     }
 
     private setupImageDrag(): void {
@@ -297,6 +319,7 @@ export class Page6Component implements OnInit, AfterViewInit {
         this.map.off('mousemove', this.onImageDrag, this);
         this.map.off('mouseup', this.onImageDragEnd, this);
 
+        // Ensure final position is saved
         this.autoSaveState();
     }
     
@@ -308,13 +331,12 @@ export class Page6Component implements OnInit, AfterViewInit {
         this.originalImageUrl = '';
         this.imageFileName = '';
         this.imageCenter = null;
+        this.showControlsModal = false;
         this.autoSaveState();
     }
 
     public autoSaveState(): void {
         try {
-            if (this.imageOverlay) this.updateImageTransform(); 
-            
             const currentSiteData = this.getCurrentSiteData();
             localStorage.setItem('siteData', JSON.stringify(currentSiteData));
         } catch (error) {
@@ -340,7 +362,6 @@ export class Page6Component implements OnInit, AfterViewInit {
                 imageRotation: this.imageRotation,
                 imageAspectRatio: this.imageAspectRatio,
                 imageCenter: { lat: this.imageCenter.lat, lng: this.imageCenter.lng },
-                // ⬇️ **MODIFICATION: Save the current opacity value**
                 imageOpacity: this.imageOpacity
             };
         }
@@ -371,8 +392,6 @@ export class Page6Component implements OnInit, AfterViewInit {
                 this.imageRotation = imageData.imageRotation;
                 this.imageAspectRatio = imageData.imageAspectRatio;
                 this.imageFileName = imageData.imageFileName;
-
-                // ⬇️ **MODIFICATION: Load the saved opacity or use a default**
                 this.imageOpacity = typeof imageData.imageOpacity === 'number' ? imageData.imageOpacity : 0.8;
 
                 if (imageData.imageCenter) {
@@ -393,12 +412,7 @@ export class Page6Component implements OnInit, AfterViewInit {
         }
     }
 
-    public resetMap(): void {
-        if (confirm('Are you sure you want to reset the map?')) {
-            localStorage.removeItem('siteData');
-            window.location.reload();
-        }
-    }
+  
 
     private loadScript(url: string): Promise<void> {
         return new Promise((resolve, reject) => {

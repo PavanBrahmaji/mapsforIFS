@@ -1,65 +1,228 @@
-/* Existing styles remain the same */
+/* General Body and Map Container Styles */
+body,
+html {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  overflow: hidden; /* Prevents scrollbars when drawer is open */
+}
+
 .map-container {
-    width: 100%;
-    height: 100vh;
+  height: 100vh;
+  width: 100vw;
 }
 
-.controls-container {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(255, 255, 255, 0.8);
-    padding: 10px 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    display: flex;
-    gap: 20px;
-    align-items: center;
-    z-index: 1000;
+/* Controls Drawer Styles */
+.controls-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  visibility: hidden; /* Hide when closed */
+  pointer-events: none;
 }
 
-.controls-container > div {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.drawer-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0);
+  transition: background-color 0.3s ease-in-out;
 }
 
-.controls-container label {
-    font-weight: bold;
+.drawer-content {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 350px; /* Width of the drawer */
+  max-width: 90%;
+  height: 100%;
+  background-color: #ffffff;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+  transform: translateX(100%); /* Start off-screen */
+  transition: transform 0.3s ease-in-out;
+  display: flex;
+  flex-direction: column;
 }
 
-.controls-container span {
-    min-width: 40px;
-    text-align: right;
+/* --- Styles for when the drawer is open --- */
+.controls-drawer.open {
+  visibility: visible;
+  pointer-events: auto;
 }
 
-.button-group {
-    border-left: 1px solid #ccc;
-    padding-left: 20px;
+.controls-drawer.open .drawer-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
-.reset-button {
-    background-color: #f44336;
-    color: white;
+.controls-drawer.open .drawer-content {
+  transform: translateX(0); /* Slide in */
+}
+/* --- End of open styles --- */
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid #e9ecef;
 }
 
-/* ⬇️ **NEW: Styles for the opacity control** */
-.opacity-control-container {
-    background: white;
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
+.drawer-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
 }
 
-.opacity-control-container label {
-    font-weight: bold;
-    font-size: 12px;
-    cursor: help;
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.75rem;
+  cursor: pointer;
+  color: #6c757d;
 }
 
-.opacity-slider {
-    cursor: pointer;
+.close-button:hover {
+  color: #000000;
+}
+
+.drawer-body {
+  padding: 20px;
+  overflow-y: auto; /* Allow scrolling for content */
+  flex-grow: 1;
+}
+
+.control-group {
+  margin-bottom: 20px;
+}
+
+.control-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #495057;
+}
+
+.control-input {
+  display: flex;
+  align-items: center;
+}
+
+.control-input input[type="range"] {
+  flex-grow: 1;
+  margin-right: 15px;
+}
+
+.value-display {
+  min-width: 50px;
+  text-align: right;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+  color: #343a40;
+}
+
+.position-info span {
+  margin-right: 15px;
+  font-family: "Courier New", Courier, monospace;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #e9ecef;
+  padding: 15px 20px;
+  background-color: #f8f9fa;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+}
+
+.btn-warning {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.btn-warning:hover {
+  background-color: #e0a800;
+}
+
+/* Floating Control Button Styles */
+.floating-controls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 999;
+}
+
+.control-toggle-btn {
+  background-color: #ffffff;
+  border: 1px solid #cccccc;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.control-toggle-btn .icon {
+  font-size: 24px;
+}
+
+.control-toggle-btn:hover {
+  background-color: #f8f9fa;
+}
+
+/* Quick Info Panel Styles */
+.quick-info-panel {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.75);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  display: flex;
+  gap: 20px;
+  z-index: 999;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-item .label {
+  font-weight: bold;
+  color: #adb5bd;
+}
+
+.info-item .value {
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
 }
