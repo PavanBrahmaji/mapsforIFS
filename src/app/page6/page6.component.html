@@ -1,73 +1,19 @@
-<div class="map-wrapper">
-    <!-- This container will hold the map and the edit-mode buttons -->
-    <div class="map-container" #mapContainer></div>
+<div class="main-container">
+    <div #mapContainer class="map-container"></div>
+    <input #imageInput type="file" accept="image/*" (change)="onImageFileSelected($event)" style="display: none;">
 
-    <!-- Buttons for Edit Mode -->
-    <div class="map-controls-overlay">
-        <!-- Button to Enter Edit Mode -->
-        <button *ngIf="!isEditingBoundaries && imageOverlay" (click)="startBoundaryEditMode()" class="map-button edit-button">
-            ✏️ Edit Boundaries
-        </button>
-
-        <!-- Container for Save/Cancel buttons, shown only in edit mode -->
-        <div *ngIf="isEditingBoundaries" class="edit-controls-container">
-            <p>You are in edit mode. Modify the boundary on the map using the toolbar.</p>
-            <button (click)="saveBoundaryChanges()" class="map-button save-button">💾 Save Changes</button>
-            <button (click)="cancelBoundaryEdit()" class="map-button cancel-button">❌ Cancel</button>
+    <div class="controls-overlay" *ngIf="imageOverlay">
+        <h3>Image Controls</h3>
+        <div class="control-group">
+            <label>Zoom:</label>
+            <input type="range" min="0.1" max="3" step="0.1" [(ngModel)]="imageScale" (input)="updateImageTransform()">
+            <span>{{ imageScale.toFixed(1) }}</span>
         </div>
-    </div>
-</div>
-
-
-<!-- Hidden file inputs, they are triggered programmatically -->
-<input type="file" #imageInput (change)="onImageFileSelected($event)" accept="image/*" style="display: none;">
-
-
-<!-- Modal for uploading and adjusting images -->
-<div *ngIf="showBoundaryModel" class="modal-backdrop" (click)="closeBoundaryModel()">
-    <div class="boundary-model" (click)="$event.stopPropagation()">
-        <div class="model-header">
-            <h3>Boundary Options</h3>
-            <button class="close-btn" (click)="closeBoundaryModel()">✕</button>
+        <div class="control-group">
+            <label>Rotate:</label>
+            <input type="range" min="0" max="360" step="5" [(ngModel)]="imageRotation" (input)="updateImageTransform()">
+            <span>{{ imageRotation }}°</span>
         </div>
-        <div class="model-body">
-            <p>{{ boundaryModelContent }}</p>
-
-            <!-- Image Adjustment Canvas and Controls -->
-            <div *ngIf="previewImageUrl" class="image-adjustment-container">
-                <h4>Image Adjustment:</h4>
-                <div class="canvas-wrapper">
-                    <canvas #adjustmentCanvas id="adjustmentCanvas" (mousedown)="handleCanvasMouseDown($event)" (mousemove)="handleCanvasMouseMove($event)" (mouseup)="handleCanvasMouseUp($event)" (mouseleave)="handleCanvasMouseUp($event)" (wheel)="handleCanvasWheel($event)"></canvas>
-                </div>
-
-                <div class="adjustment-controls">
-                    <label for="rotation-slider">Rotate:</label>
-                    <input type="range" id="rotation-slider" min="0" max="360" [(ngModel)]="tempImageRotationAngle" (input)="drawAdjustmentCanvas()" />
-                    <span>{{ tempImageRotationAngle | number:'1.0-0' }}°</span>
-                </div>
-            </div>
-
-            <!-- Modal Footer with Conditional Buttons -->
-            <div class="model-footer">
-                <ng-container *ngIf="!imageOverlay && !previewImageUrl">
-                    <button (click)="triggerImageInput()">Upload Image</button>
-                </ng-container>
-
-                <ng-container *ngIf="previewImageUrl && !imageOverlay">
-                    <button (click)="saveAdjustedImageOverlay()">Save Clipped Image</button>
-                    <button class="cancel-button" (click)="closeBoundaryModel()">Cancel</button>
-                </ng-container>
-
-                <ng-container *ngIf="imageOverlay && !previewImageUrl">
-                    <button (click)="removeImage(); closeBoundaryModel()">Remove Image</button>
-                    <button (click)="editExistingImageOverlay()">Edit Image</button>
-                </ng-container>
-
-                <ng-container *ngIf="imageOverlay && previewImageUrl">
-                    <button (click)="saveAdjustedImageOverlay()">Save Changes</button>
-                    <button class="cancel-button" (click)="closeBoundaryModel()">Cancel</button>
-                </ng-container>
-            </div>
-        </div>
+        <button (click)="removeImage()" class="remove-btn">Remove Image</button>
     </div>
 </div>
