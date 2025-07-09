@@ -38,6 +38,9 @@ interface SiteData {
         imageAspectRatio: number;
         imageCenter?: { lat: number; lng: number };
         imageOpacity?: number;
+        // Add original dimensions to preserve image size
+        originalImageWidth?: number;
+        originalImageHeight?: number;
     };
 }
 
@@ -72,6 +75,10 @@ export class Page6Component implements OnInit, AfterViewInit {
     private imageAspectRatio: number = 1;
     private imageFileName: string = '';
     private serverUrl = 'http://localhost:3000';
+
+    // Add properties to store original image dimensions
+    private originalImageWidth: number = 0;
+    private originalImageHeight: number = 0;
 
     public isSaving: boolean = false;
     public saveMessage: string = '';
@@ -140,7 +147,9 @@ export class Page6Component implements OnInit, AfterViewInit {
         });
 
         this.map.on(L.Draw.Event.EDITED, () => {
-             this.autoSaveState();
+            // Don't recreate image overlay when boundary is edited
+            // The image should maintain its size and position
+            this.autoSaveState();
         });
 
         this.map.on(L.Draw.Event.DELETED, () => {
@@ -193,6 +202,12 @@ export class Page6Component implements OnInit, AfterViewInit {
         if (this.imageOverlay) this.imageOverlay.remove();
 
         this.imageCenter = this.imageCenter || this.boundaryPolygonLayer.getBounds().getCenter();
+        
+        // Calculate initial image dimensions only if they haven't been set
+        if (this.originalImageWidth === 0 || this.originalImageHeight === 0) {
+            this.calculateInitialImageDimensions();
+        }
+
         const corners = this.calculateImageCorners();
 
         this.imageOverlay = L.imageOverlay.rotated(
@@ -206,23 +221,32 @@ export class Page6Component implements OnInit, AfterViewInit {
         this.setupImageDrag();
     }
 
-    private calculateImageCorners(): { topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng } {
-        if (!this.imageCenter || !this.boundaryPolygonLayer) throw new Error("Missing data for corner calculation");
+    private calculateInitialImageDimensions(): void {
+        if (!this.boundaryPolygonLayer) return;
 
         const bounds = this.boundaryPolygonLayer.getBounds();
         const boundaryWidth = bounds.getEast() - bounds.getWest();
         const boundaryHeight = bounds.getNorth() - bounds.getSouth();
         const boundaryAspectRatio = boundaryWidth / boundaryHeight;
 
-        let imageWidthDegrees, imageHeightDegrees;
+        // Calculate initial dimensions based on boundary - this should only happen once
         if (boundaryAspectRatio > this.imageAspectRatio) {
-            imageHeightDegrees = boundaryHeight;
-            imageWidthDegrees = imageHeightDegrees * this.imageAspectRatio;
+            this.originalImageHeight = boundaryHeight;
+            this.originalImageWidth = this.originalImageHeight * this.imageAspectRatio;
         } else {
-            imageWidthDegrees = boundaryWidth;
-            imageHeightDegrees = imageWidthDegrees / this.imageAspectRatio;
+            this.originalImageWidth = boundaryWidth;
+            this.originalImageHeight = this.originalImageWidth / this.imageAspectRatio;
         }
+    }
 
+    private calculateImageCorners(): { topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng } {
+        if (!this.imageCenter) throw new Error("Missing image center for corner calculation");
+
+        // Use stored original dimensions instead of recalculating from boundary
+        let imageWidthDegrees = this.originalImageWidth;
+        let imageHeightDegrees = this.originalImageHeight;
+
+        // Apply current scale
         imageWidthDegrees *= this.imageScale;
         imageHeightDegrees *= this.imageScale;
 
@@ -331,6 +355,8 @@ export class Page6Component implements OnInit, AfterViewInit {
         this.originalImageUrl = '';
         this.imageFileName = '';
         this.imageCenter = null;
+        this.originalImageWidth = 0;
+        this.originalImageHeight = 0;
         this.showControlsModal = false;
         this.autoSaveState();
     }
@@ -362,7 +388,10 @@ export class Page6Component implements OnInit, AfterViewInit {
                 imageRotation: this.imageRotation,
                 imageAspectRatio: this.imageAspectRatio,
                 imageCenter: { lat: this.imageCenter.lat, lng: this.imageCenter.lng },
-                imageOpacity: this.imageOpacity
+                imageOpacity: this.imageOpacity,
+                // Store original dimensions
+                originalImageWidth: this.originalImageWidth,
+                originalImageHeight: this.originalImageHeight
             };
         }
         return siteData;
@@ -394,6 +423,10 @@ export class Page6Component implements OnInit, AfterViewInit {
                 this.imageFileName = imageData.imageFileName;
                 this.imageOpacity = typeof imageData.imageOpacity === 'number' ? imageData.imageOpacity : 0.8;
 
+                // Restore original dimensions
+                this.originalImageWidth = imageData.originalImageWidth || 0;
+                this.originalImageHeight = imageData.originalImageHeight || 0;
+
                 if (imageData.imageCenter) {
                     this.imageCenter = L.latLng(imageData.imageCenter.lat, imageData.imageCenter.lng);
                 }
@@ -411,8 +444,6 @@ export class Page6Component implements OnInit, AfterViewInit {
             console.error('Error loading state from localStorage:', error);
         }
     }
-
-  
 
     private loadScript(url: string): Promise<void> {
         return new Promise((resolve, reject) => {
