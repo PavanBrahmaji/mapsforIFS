@@ -6,23 +6,22 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../services/api.service';
 
-declare global {
-  namespace L {
-    namespace ImageOverlay {
-      interface Rotated extends L.ImageOverlay {
-        reposition(topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng): void;
-        setOpacity(opacity: number): this;
-      }
+declare module 'leaflet' {
+  namespace ImageOverlay {
+    interface Rotated extends L.ImageOverlay {
+      reposition(topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng): void;
+      setOpacity(opacity: number): this;
     }
-    namespace imageOverlay {
-      function rotated(
-        imgSrc: string | HTMLImageElement | HTMLCanvasElement,
-        topleft: L.LatLng,
-        topright: L.LatLng,
-        bottomleft: L.LatLng,
-        options?: L.ImageOverlayOptions
-      ): L.ImageOverlay.Rotated;
-    }
+  }
+
+  namespace imageOverlay {
+    function rotated(
+      imgSrc: string | HTMLImageElement | HTMLCanvasElement,
+      topleft: L.LatLng,
+      topright: L.LatLng,
+      bottomleft: L.LatLng,
+      options?: L.ImageOverlayOptions
+    ): L.ImageOverlay.Rotated;
   }
 }
 
@@ -61,6 +60,7 @@ export class Page6Component implements OnInit, AfterViewInit {
   public boundaryPolygonLayer?: L.Polygon;
   public imageOverlay?: L.ImageOverlay.Rotated;
   private drawControl: L.Control.Draw | null = null;
+  private editToolbar: L.EditToolbar | null = null;
   public siteData: SiteData | null = null;
 
   public imageScale: number = 1;
@@ -95,7 +95,7 @@ export class Page6Component implements OnInit, AfterViewInit {
 
   async ngAfterViewInit(): Promise<void> {
     try {
-      await this.pluginReady; 
+      await this.pluginReady;
       this.initializeMap();
       this.loadStateFromLocalStorage();
     } catch (error) {
@@ -112,57 +112,113 @@ export class Page6Component implements OnInit, AfterViewInit {
     this.setupMapEvents();
   }
 
-  private setupDrawControls(): void {
-    if (!this.isEditMode) return;
-    
-    if (this.drawControl) {
-      this.map.removeControl(this.drawControl);
-    }
-    
-    this.drawControl = new L.Control.Draw({
-      position: 'topleft',
-      draw: {
-        polygon: false,
-        polyline: false, 
-        rectangle: false, 
-        circle: false, 
-        marker: false, 
-        circlemarker: false,
-      },
-      edit: { featureGroup: this.drawnItems, remove: false },
-    });
-    this.map.addControl(this.drawControl);
+ private setupDrawControls(): void {
+  // Remove existing controls
+  if (this.drawControl) {
+    this.map.removeControl(this.drawControl);
+    this.drawControl = null;
   }
 
+  if (!this.isEditMode) return;
+
+  const drawOptions: L.Control.DrawConstructorOptions = {
+    position: 'topleft',
+    draw: {
+      polygon: this.boundaryPolygonLayer ? false : {
+        shapeOptions: {
+          color: '#f06eaa',
+          weight: 3,
+          opacity: 0.8,
+          fillOpacity: 0.2
+        }
+      },
+      polyline: false,
+      rectangle: false,
+      circle: false,
+      marker: false,
+      circlemarker: false,
+    },
+    edit: this.boundaryPolygonLayer ? {
+      featureGroup: this.drawnItems,
+      remove: false
+    } : undefined
+  };
+
+  this.drawControl = new L.Control.Draw(drawOptions);
+  this.map.addControl(this.drawControl);
+}
+
   private setupMapEvents(): void {
+    // Handle polygon creation
     this.map.on(L.Draw.Event.CREATED, (e: any) => {
       if (!this.isEditMode) return;
       
       const layer = e.layer;
       if (layer instanceof L.Polygon) {
+        // Clear existing polygons
         this.drawnItems.clearLayers();
         this.drawnItems.addLayer(layer);
         this.boundaryPolygonLayer = layer;
         this.setupBoundaryInteraction(layer);
+        this.setupDrawControls(); // Refresh controls to show edit/delete buttons
+        console.log('Polygon created successfully');
       }
     });
 
-    this.map.on(L.Draw.Event.EDITED, () => {
-      if (!this.isEditMode) return;
+    // Handle polygon editing
+    this.map.on(L.Draw.Event.EDITED, (e: any) => {
+      console.log('Polygon edited');
+      if (this.boundaryPolygonLayer && !this.isEditMode) {
+        this.applyClipping();
+      }
+      // Update any dependent calculations if needed
+      if (this.imageOverlay && this.isEditMode) {
+        // Optionally recalculate image dimensions based on new boundary
+        this.calculateInitialImageDimensions();
+        this.updateImageTransform();
+      }
     });
 
-    this.map.on(L.Draw.Event.DELETED, () => {
+    // Handle polygon deletion
+    this.map.on(L.Draw.Event.DELETED, (e: any) => {
+      console.log('Polygon deleted');
       if (!this.isEditMode) return;
+      
+      // Clear the boundary polygon reference
       this.boundaryPolygonLayer = undefined;
       this.removeImage();
+      this.setupDrawControls(); // Refresh controls to show create button
+    });
+
+    // Handle edit start
+    this.map.on('draw:editstart', (e: any) => {
+      console.log('Edit mode started');
+      if (this.imageOverlay) {
+        this.removeClipping(); // Remove clipping while editing
+      }
+    });
+
+    // Handle edit stop
+    this.map.on('draw:editstop', (e: any) => {
+      console.log('Edit mode stopped');
+      if (this.imageOverlay && !this.isEditMode) {
+        this.applyClipping(); // Reapply clipping after editing
+      }
     });
   }
 
   private setupBoundaryInteraction(layer: L.Polygon): void {
-    layer.on('click', () => {
+    layer.on('click', (e: L.LeafletEvent) => {
       if (!this.isEditMode || !this.imageInput?.nativeElement) return;
+      
+      // Prevent the click from propagating to the map
+      L.DomEvent.stopPropagation(e);
+      
+      // Trigger file input
       this.imageInput.nativeElement.click();
     });
+
+    // Set cursor style for better UX
     const element = layer.getElement();
     if (element) {
       (element as HTMLElement).style.cursor = 'pointer';
@@ -213,7 +269,7 @@ export class Page6Component implements OnInit, AfterViewInit {
       corners.topleft,
       corners.topright,
       corners.bottomleft,
-      { 
+      {
         opacity: this.imageOpacity,
         interactive: true,
         bubblingMouseEvents: false
@@ -287,15 +343,21 @@ export class Page6Component implements OnInit, AfterViewInit {
     if (!this.boundaryPolygonLayer) return;
 
     const bounds = this.boundaryPolygonLayer.getBounds();
-    const boundaryWidth = bounds.getEast() - bounds.getWest();
-    const boundaryHeight = bounds.getNorth() - bounds.getSouth();
+    const boundaryWidth = this.map.project(bounds.getNorthEast()).x - this.map.project(bounds.getSouthWest()).x;
+    const boundaryHeight = this.map.project(bounds.getSouthWest()).y - this.map.project(bounds.getNorthEast()).y;
     const boundaryAspectRatio = boundaryWidth / boundaryHeight;
 
+    const lat = this.imageCenter?.lat || bounds.getCenter().lat;
+    const metersPerPixel = 40075016.686 * Math.abs(Math.cos(lat * Math.PI / 180)) / Math.pow(2, this.map.getZoom() + 8);
+    
+    const boundaryWidthMeters = boundaryWidth * metersPerPixel;
+    const boundaryHeightMeters = boundaryHeight * metersPerPixel;
+
     if (boundaryAspectRatio > this.imageAspectRatio) {
-      this.originalImageHeight = boundaryHeight;
+      this.originalImageHeight = boundaryHeightMeters;
       this.originalImageWidth = this.originalImageHeight * this.imageAspectRatio;
     } else {
-      this.originalImageWidth = boundaryWidth;
+      this.originalImageWidth = boundaryWidthMeters;
       this.originalImageHeight = this.originalImageWidth / this.imageAspectRatio;
     }
   }
@@ -303,8 +365,12 @@ export class Page6Component implements OnInit, AfterViewInit {
   private calculateImageCorners(): { topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng } {
     if (!this.imageCenter) throw new Error("Missing image center for corner calculation");
 
-    let imageWidthDegrees = this.originalImageWidth * this.imageScale;
-    let imageHeightDegrees = this.originalImageHeight * this.imageScale;
+    const lat = this.imageCenter.lat;
+    const metersPerDegreeLat = 111132.954 - 559.822 * Math.cos(2 * lat * Math.PI/180) + 1.175 * Math.cos(4 * lat * Math.PI/180);
+    const metersPerDegreeLng = 111320 * Math.cos(lat * Math.PI/180);
+
+    const imageHeightDegrees = (this.originalImageHeight * this.imageScale) / metersPerDegreeLat;
+    const imageWidthDegrees = (this.originalImageWidth * this.imageScale) / metersPerDegreeLng;
 
     const halfWidth = imageWidthDegrees / 2;
     const halfHeight = imageHeightDegrees / 2;
@@ -320,22 +386,22 @@ export class Page6Component implements OnInit, AfterViewInit {
       const dy = point.lat - this.imageCenter.lat;
       const newLng = this.imageCenter.lng + (dx * Math.cos(angleRad) - dy * Math.sin(angleRad));
       const newLat = this.imageCenter.lat + (dx * Math.sin(angleRad) + dy * Math.cos(angleRad));
-      return L.latLng(newLat, newLng);
+      return L.latLng(newLat, newLng); // ✨ CORRECTED
     };
     
-    return { 
-      topleft: rotatePoint(topleft), 
-      topright: rotatePoint(topright), 
-      bottomleft: rotatePoint(bottomleft) 
+    return {
+      topleft: rotatePoint(topleft),
+      topright: rotatePoint(topright),
+      bottomleft: rotatePoint(bottomleft)
     };
   }
-  
+
   public updateImageTransform(): void {
     if (!this.imageOverlay || !this.imageCenter) return;
     const corners = this.calculateImageCorners();
     this.imageOverlay.reposition(corners.topleft, corners.topright, corners.bottomleft);
   }
-  
+
   public onOpacityChange(): void {
     if (this.imageOverlay) {
       this.imageOverlay.setOpacity(this.imageOpacity);
@@ -357,7 +423,7 @@ export class Page6Component implements OnInit, AfterViewInit {
   public closeControlsModal(): void {
     this.showControlsModal = false;
   }
-  
+
   public removeImage(): void {
     if (!this.isEditMode) return;
     
@@ -385,26 +451,97 @@ export class Page6Component implements OnInit, AfterViewInit {
     }
   }
 
+  /**
+   * ✨ FIXED METHOD ✨
+   * Enables edit mode and properly sets up boundary editing controls
+   */
   public enableEditing(): void {
+    console.log('Enabling edit mode...');
     this.isEditMode = true;
+    
+    // Re-setup draw controls with proper edit configuration
     this.setupDrawControls();
     
+    // Enable interaction and dragging for the image overlay if it exists
     if (this.imageOverlay) {
       this.imageOverlay.options.interactive = true;
+      this.removeClipping();
+      this.map.off('move', this.applyClipping, this);
       this.setupImageDrag();
     }
+    
+    // If there's an existing boundary, ensure it's properly set up for editing
+    if (this.boundaryPolygonLayer) {
+      // Make sure the boundary is in the drawnItems layer for editing
+      if (!this.drawnItems.hasLayer(this.boundaryPolygonLayer)) {
+        this.drawnItems.addLayer(this.boundaryPolygonLayer);
+      }
+      this.setupBoundaryInteraction(this.boundaryPolygonLayer);
+    }
+    
     this.cdr.detectChanges();
+    console.log('Edit mode enabled successfully');
   }
 
   private disableEditing(): void {
+    console.log('Disabling edit mode...');
+    
+    // Remove draw controls
     if (this.drawControl) {
       this.map.removeControl(this.drawControl);
       this.drawControl = null;
     }
     
+    // Disable image interaction
     if (this.imageOverlay) {
       this.imageOverlay.options.interactive = false;
       this.imageOverlay.off('mousedown');
+      this.applyClipping();
+      this.map.on('move', this.applyClipping, this);
+    }
+    
+    console.log('Edit mode disabled successfully');
+  }
+
+  private getClipPathForPolygon(): string {
+    if (!this.boundaryPolygonLayer || !this.imageOverlay) {
+      return 'none';
+    }
+
+    const imageElement = this.imageOverlay.getElement();
+    if (!imageElement) {
+      return 'none';
+    }
+
+    const imageBounds = imageElement.getBoundingClientRect();
+    const latLngs = this.boundaryPolygonLayer.getLatLngs()[0] as L.LatLng[];
+
+    const pixelPoints = latLngs.map(latLng => {
+      const point = this.map.latLngToContainerPoint(latLng);
+      const relativeX = point.x - imageBounds.left;
+      const relativeY = point.y - imageBounds.top;
+      return `${relativeX.toFixed(2)}px ${relativeY.toFixed(2)}px`;
+    });
+
+    return `polygon(${pixelPoints.join(', ')})`;
+  }
+
+  private applyClipping(): void {
+    if (!this.imageOverlay) return;
+    const imageElement = this.imageOverlay.getElement();
+    if (imageElement) {
+      const clipPath = this.getClipPathForPolygon();
+      this.renderer.setStyle(imageElement, 'clip-path', clipPath);
+      this.renderer.setStyle(imageElement, '-webkit-clip-path', clipPath);
+    }
+  }
+
+  private removeClipping(): void {
+    if (!this.imageOverlay) return;
+    const imageElement = this.imageOverlay.getElement();
+    if (imageElement) {
+      this.renderer.removeStyle(imageElement, 'clip-path');
+      this.renderer.removeStyle(imageElement, '-webkit-clip-path');
     }
   }
 
@@ -481,9 +618,11 @@ export class Page6Component implements OnInit, AfterViewInit {
         };
         img.onerror = () => console.error(`Failed to reload image: ${this.originalImageUrl}`);
         img.src = this.originalImageUrl;
+      } else {
+        this.disableEditing();
       }
+      this.setupDrawControls();
       
-      this.disableEditing();
     } catch (error) {
       console.error('Error loading state:', error);
       this.isEditMode = true;

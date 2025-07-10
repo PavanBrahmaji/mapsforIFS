@@ -1,4 +1,4 @@
-<div #mapContainer class="map-container" [class.locked]="!isEditMode"></div>
+<div #mapContainer class="map-container"></div>
 
 <input
   type="file"
@@ -93,20 +93,20 @@
   </div>
 </div>
 
-<div class="floating-controls" *ngIf="imageOverlay">
+<div class="floating-controls">
   <button
+    *ngIf="imageOverlay && isEditMode"
     class="control-toggle-btn"
     (click)="toggleControlsModal()"
     title="Open Image Controls"
-    [disabled]="!isEditMode"
   >
     <span class="icon">⚙️</span>
   </button>
-  <button  class="btn btn-warning" (click)="enableEditing()">
-        Edit
-      </button>
+  
+  <button *ngIf="!isEditMode" class="btn btn-warning" (click)="enableEditing()">
+    Edit ✏️
+  </button>
 </div>
-
 
 <div class="quick-info-panel" *ngIf="imageOverlay">
   <div class="info-item">

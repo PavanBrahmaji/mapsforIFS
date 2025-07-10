@@ -11,11 +11,7 @@ html {
 .map-container {
   height: 100vh;
   width: 100vw;
-}
-
-.map-container.locked {
-  pointer-events: none;
-  cursor: not-allowed;
+  background-color: #f0f0f0; /* A light background for the map */
 }
 
 /* Controls Drawer Styles */
@@ -157,7 +153,10 @@ html {
   cursor: pointer;
   font-size: 1rem;
   font-weight: bold;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, background-color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .btn[disabled] {
@@ -198,12 +197,14 @@ html {
   top: 20px;
   right: 20px;
   z-index: 999;
+  display: flex;
+  gap: 10px;
 }
 
 .control-toggle-btn {
   background-color: #ffffff;
   border: 1px solid #cccccc;
-  border-radius: 50%;
+  border-radius: 8px;
   width: 50px;
   height: 50px;
   cursor: pointer;
