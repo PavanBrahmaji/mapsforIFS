@@ -1,4 +1,4 @@
-<div #mapContainer class="map-container"></div>
+<div #mapContainer class="map-container" [class.locked]="!isEditMode"></div>
 
 <input
   type="file"
@@ -6,6 +6,7 @@
   hidden
   (change)="onImageFileSelected($event)"
   accept="image/png, image/jpeg, image/gif"
+  [disabled]="!isEditMode"
 />
 
 <div class="controls-drawer" [class.open]="showControlsModal">
@@ -28,6 +29,7 @@
             step="0.05"
             [(ngModel)]="imageScale"
             (input)="onScaleChange()"
+            [disabled]="!isEditMode"
           />
           <span class="value-display">{{ imageScale.toFixed(2) }}</span>
         </div>
@@ -44,6 +46,7 @@
             step="1"
             [(ngModel)]="imageRotation"
             (input)="onRotationChange()"
+            [disabled]="!isEditMode"
           />
           <span class="value-display">{{ imageRotation }}°</span>
         </div>
@@ -60,6 +63,7 @@
             step="0.05"
             [(ngModel)]="imageOpacity"
             (input)="onOpacityChange()"
+            [disabled]="!isEditMode"
           />
           <span class="value-display">{{ (imageOpacity * 100).toFixed(0) }}%</span>
         </div>
@@ -78,7 +82,13 @@
     </div>
 
     <div class="drawer-footer">
-      <button class="btn btn-danger" (click)="removeImage()">Remove Image</button>
+      <button *ngIf="isEditMode" class="btn btn-primary" (click)="saveConfiguration()" [disabled]="!imageOverlay">
+        Save Configuration
+      </button>
+      
+      <button class="btn btn-danger" (click)="removeImage()" [disabled]="!isEditMode || !imageOverlay">
+        Remove Image
+      </button>
     </div>
   </div>
 </div>
@@ -88,8 +98,27 @@
     class="control-toggle-btn"
     (click)="toggleControlsModal()"
     title="Open Image Controls"
+    [disabled]="!isEditMode"
   >
     <span class="icon">⚙️</span>
   </button>
+  <button  class="btn btn-warning" (click)="enableEditing()">
+        Edit
+      </button>
 </div>
 
+
+<div class="quick-info-panel" *ngIf="imageOverlay">
+  <div class="info-item">
+    <span class="label">Scale:</span>
+    <span class="value">{{ imageScale.toFixed(2) }}x</span>
+  </div>
+  <div class="info-item">
+    <span class="label">Rotation:</span>
+    <span class="value">{{ imageRotation }}°</span>
+  </div>
+  <div class="info-item">
+    <span class="label">Opacity:</span>
+    <span class="value">{{ (imageOpacity * 100).toFixed(0) }}%</span>
+  </div>
+</div>
