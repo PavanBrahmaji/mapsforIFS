@@ -107,18 +107,3 @@
     Edit ✏️
   </button>
 </div>
-
-<div class="quick-info-panel" *ngIf="imageOverlay">
-  <div class="info-item">
-    <span class="label">Scale:</span>
-    <span class="value">{{ imageScale.toFixed(2) }}x</span>
-  </div>
-  <div class="info-item">
-    <span class="label">Rotation:</span>
-    <span class="value">{{ imageRotation }}°</span>
-  </div>
-  <div class="info-item">
-    <span class="label">Opacity:</span>
-    <span class="value">{{ (imageOpacity * 100).toFixed(0) }}%</span>
-  </div>
-</div>
