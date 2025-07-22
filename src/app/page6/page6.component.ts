@@ -103,7 +103,7 @@ export class Page6Component implements OnInit, AfterViewInit {
   }
 
   private initializeMap(): void {
-    this.map = L.map(this.mapContainer.nativeElement).setView([this.lat, this.lon], 5);
+    this.map = L.map(this.mapContainer.nativeElement,{attributionControl: false}).setView([this.lat, this.lon], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
     this.drawnItems = new L.FeatureGroup();
     this.map.addLayer(this.drawnItems);

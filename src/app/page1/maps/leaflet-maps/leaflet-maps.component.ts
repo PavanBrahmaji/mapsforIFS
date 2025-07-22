@@ -76,7 +76,8 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
     // Initialize map centered on the United States with zoom level 4
     this.map = L.map(this.mapContainer.nativeElement, {
       zoomControl: false,
-      preferCanvas: true // Better performance for animations
+      preferCanvas: true ,
+      attributionControl: false// Better performance for animations
     }).setView([this.lat, this.lon], 4);
 
     // Add zoom control to the bottom right

@@ -19,10 +19,8 @@ const redIcon = L.icon({
 })
 export class Page3Component implements OnInit, AfterViewInit, OnChanges {
   @ViewChild('mapContainer', { static: false }) mapContainer!: ElementRef;
-
   @Input() lat: number = 39.8283;
   @Input() lon: number = -98.5795;
-
   @Output() drawingsChanged = new EventEmitter<any>();
 
   map!: L.Map;
@@ -44,9 +42,7 @@ export class Page3Component implements OnInit, AfterViewInit, OnChanges {
   }
 
   private initializeMap(): void {
-    this.map = L.map(this.mapContainer.nativeElement, {
-      zoomControl: false
-    }).setView([this.lat, this.lon], 4);
+    this.map = L.map(this.mapContainer.nativeElement,{attributionControl: false}).setView([this.lat, this.lon], 4);
 
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 

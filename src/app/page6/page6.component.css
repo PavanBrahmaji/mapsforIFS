@@ -1,6 +1,12 @@
-/* General Body and Map Container Styles */
-body,
-html {
+/* Reset and Global Styles */
+*,
+*:before,
+*:after {
+  box-sizing: border-box;
+}
+
+html,
+body {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -8,13 +14,14 @@ html {
   overflow: hidden;
 }
 
+/* Map Container */
 .map-container {
   height: 100vh;
   width: 100vw;
-  background-color: #f0f0f0; /* A light background for the map */
+  background-color: #f0f0f0;
 }
 
-/* Controls Drawer Styles */
+/* Controls Drawer */
 .controls-drawer {
   position: fixed;
   top: 0;
@@ -26,6 +33,11 @@ html {
   pointer-events: none;
 }
 
+.controls-drawer.open {
+  visibility: visible;
+  pointer-events: auto;
+}
+
 .drawer-backdrop {
   position: absolute;
   top: 0;
@@ -34,6 +46,10 @@ html {
   height: 100%;
   background-color: rgba(0, 0, 0, 0);
   transition: background-color 0.3s ease-in-out;
+}
+
+.controls-drawer.open .drawer-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 .drawer-content {
@@ -51,21 +67,11 @@ html {
   flex-direction: column;
 }
 
-/* Open state styles */
-.controls-drawer.open {
-  visibility: visible;
-  pointer-events: auto;
-}
-
-.controls-drawer.open .drawer-backdrop {
-  background-color: rgba(0, 0, 0, 0.5);
-}
-
 .controls-drawer.open .drawer-content {
   transform: translateX(0);
 }
 
-/* Drawer sections */
+/* Drawer Sections */
 .drawer-header {
   display: flex;
   justify-content: space-between;
@@ -97,6 +103,16 @@ html {
   flex-grow: 1;
 }
 
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 15px 20px;
+  border-top: 1px solid #e9ecef;
+  background-color: #f8f9fa;
+}
+
+/* Control Group */
 .control-group {
   margin-bottom: 20px;
 }
@@ -111,11 +127,11 @@ html {
 .control-input {
   display: flex;
   align-items: center;
+  gap: 15px;
 }
 
 .control-input input[type="range"] {
   flex-grow: 1;
-  margin-right: 15px;
 }
 
 .control-input input[disabled] {
@@ -123,29 +139,24 @@ html {
   cursor: not-allowed;
 }
 
-.value-display {
-  min-width: 50px;
-  text-align: right;
+.value-input {
+  width: 80px;
+  padding: 6px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
   font-family: "Courier New", Courier, monospace;
   font-weight: bold;
-  color: #343a40;
+  text-align: right;
+  -moz-appearance: textfield;
 }
 
-.position-info span {
-  margin-right: 15px;
-  font-family: "Courier New", Courier, monospace;
+.value-input::-webkit-outer-spin-button,
+.value-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
-.drawer-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  border-top: 1px solid #e9ecef;
-  padding: 15px 20px;
-  background-color: #f8f9fa;
-}
-
-/* Button styles */
+/* Button Styles */
 .btn {
   padding: 10px 20px;
   border: none;
@@ -166,7 +177,7 @@ html {
 
 .btn-primary {
   background-color: #007bff;
-  color: white;
+  color: #ffffff;
 }
 
 .btn-primary:hover:not([disabled]) {
@@ -184,7 +195,7 @@ html {
 
 .btn-danger {
   background-color: #dc3545;
-  color: white;
+  color: #ffffff;
 }
 
 .btn-danger:hover:not([disabled]) {
@@ -212,7 +223,7 @@ html {
   display: flex;
   justify-content: center;
   align-items: center;
-  transition: all 0.2s;
+  transition: background-color 0.2s, transform 0.2s;
 }
 
 .control-toggle-btn[disabled] {
@@ -220,13 +231,13 @@ html {
   cursor: not-allowed;
 }
 
-.control-toggle-btn .icon {
-  font-size: 24px;
-}
-
 .control-toggle-btn:hover:not([disabled]) {
   background-color: #f8f9fa;
   transform: scale(1.05);
+}
+
+.control-toggle-btn .icon {
+  font-size: 24px;
 }
 
 /* Quick Info Panel */
@@ -236,7 +247,7 @@ html {
   left: 50%;
   transform: translateX(-50%);
   background-color: rgba(0, 0, 0, 0.75);
-  color: white;
+  color: #ffffff;
   padding: 10px 20px;
   border-radius: 8px;
   display: flex;
@@ -260,3 +271,10 @@ html {
   font-family: "Courier New", Courier, monospace;
   font-weight: bold;
 }
+
+/* Position Info */
+.position-info span {
+  margin-right: 15px;
+  font-family: "Courier New", Courier, monospace;
+}
+

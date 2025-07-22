@@ -1,0 +1,121 @@
+<div #mapContainer class="map-container"></div>
+
+<input type="file" #originalImageInput hidden (change)="onImageFileSelected($event, 'original')" accept="image/*" />
+<input type="file" #annotatedImageInput hidden (change)="onImageFileSelected($event, 'annotated')" accept="image/*" />
+
+<div class="controls-modal" [class.open]="showUploadModal">
+  <div class="modal-backdrop" (click)="toggleUploadModal()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Manage Images</h3>
+      <button class="close-button" (click)="toggleUploadModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="upload-section">
+        <label>Original Image</label>
+        <div class="upload-control">
+          <span class="file-name" [title]="siteData.imageConfigs?.original?.fileName || 'No file selected'">
+            {{ siteData.imageConfigs?.original?.fileName || 'No file selected' }}
+          </span>
+          <button class="btn btn-secondary" (click)="originalImageInput.click()">
+            {{ siteData.imageConfigs?.original ? 'Replace' : 'Choose File' }}
+          </button>
+        </div>
+        <button *ngIf="siteData.imageConfigs?.original" class="btn btn-danger btn-remove"
+          (click)="removeImage('original')">
+          Remove Original Image
+        </button>
+      </div>
+
+      <div class="upload-section">
+        <label>Annotated Image</label>
+        <div class="upload-control">
+          <span class="file-name" [title]="siteData.imageConfigs?.annotated?.fileName || 'No file selected'">
+            {{ siteData.imageConfigs?.annotated?.fileName || 'No file selected' }}
+          </span>
+          <button class="btn btn-secondary" (click)="annotatedImageInput.click()">
+            {{ siteData.imageConfigs?.annotated ? 'Replace' : 'Choose File' }}
+          </button>
+        </div>
+        <button *ngIf="siteData.imageConfigs?.annotated" class="btn btn-danger btn-remove"
+          (click)="removeImage('annotated')">
+          Remove Annotated Image
+        </button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" (click)="toggleUploadModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="controls-modal" [class.open]="showControlsModal">
+    <div class="modal-backdrop" (click)="closeControlsModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Image Controls</h3>
+            <button class="close-button" (click)="closeControlsModal()">&times;</button>
+          </div>
+        <div class="modal-body">
+            <div class="control-group">
+                <label>Scale (Current: {{imageScale | number:'1.2-2'}})</label>
+                <div class="control-input">
+                    <input type="range" min="0.1" max="10" step="0.1" [(ngModel)]="imageScale"
+            (input)="onScaleChange()" />
+                  </div>
+              </div>
+            <div class="control-group">
+                <label>Rotation (Current: {{imageRotation}}°)</label>
+                <div class="control-input">
+                    <input type="range" min="-180" max="180" step="1" [(ngModel)]="imageRotation"
+            (input)="onRotationChange()" />
+                  </div>
+              </div>
+            <div class="control-group">
+                <label>Opacity (Current: {{imageOpacity | number:'1.2-2'}})</label>
+                <div class="control-input">
+                    <input type="range" min="0" max="1" step="0.05" [(ngModel)]="imageOpacity"
+            (input)="onOpacityChange()" />
+                  </div>
+              </div>
+          </div>
+        <div class="modal-footer">
+      <button class="btn btn-primary" (click)="saveConfiguration()">
+                Save All Configurations
+              </button>
+         
+    </div>
+      </div>
+</div>
+
+<div class="floating-controls">
+  <button *ngIf="!isEditMode" class="btn btn-warning" (click)="enableEditing()">
+        Edit ✏️
+      </button>
+
+  <button class="btn btn-primary" (click)="handleUploadClick()" title="Manage Images"
+    [disabled]="!boundaryPolygonLayer">
+    Manage Images 🏙️
+  </button>
+
+  <div class="floating-dropdown-container" *ngIf="siteData.imageConfigs?.original || siteData.imageConfigs?.annotated">
+    <label for="image-type-select">View</label>
+    <select id="image-type-select" class="form-select" [(ngModel)]="activeImageType" (change)="switchImageType()"
+      [disabled]="isEditMode">
+      <option value="none">No Image</option>
+      <option value="original" [disabled]="!siteData.imageConfigs?.original">Original</option>
+      <option value="annotated" [disabled]="!siteData.imageConfigs?.annotated">Annotated</option>
+    </select>
+  </div>
+
+    <button *ngIf="activeImageType !== 'none' && isEditMode" class="control-toggle-btn" (click)="toggleControlsModal()"
+    title="Open Image Controls">
+        <span class="icon">⚙️</span>
+      </button>
+
+    <button *ngIf="boundaryPolygonLayer && !isEditMode" class="control-toggle-btn" (click)="extractMapImage()"
+    [disabled]="extracting" title="Extract Map Image">
+        <span class="icon" *ngIf="!extracting">📸</span>
+        <span class="icon" *ngIf="extracting">⏳</span>
+      </button>
+</div>
