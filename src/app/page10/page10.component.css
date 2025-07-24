@@ -318,3 +318,66 @@ body {
     width: 100%;
     margin-top: 10px;
 }
+
+/* Add this to your existing CSS file */
+
+/* Edit mode image styling */
+.leaflet-image-edit-mode {
+    border: 3px solid #dc3545 !important;
+    box-shadow: 0 0 10px rgba(220, 53, 69, 0.5) !important;
+    cursor: move !important;
+}
+
+/* Enhanced resize handle styling */
+.resize-handle {
+    transition: all 0.2s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.resize-handle:hover {
+    background: #007bff !important;
+    transform: scale(1.2);
+    box-shadow: 0 0 8px rgba(0, 123, 255, 0.5) !important;
+}
+
+.resize-handle:active {
+    background: #0056b3 !important;
+    transform: scale(1.1);
+}
+
+/* Enhanced rotation handle styling */
+.rotation-handle {
+    transition: all 0.2s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.rotation-handle:hover {
+    background: #28a745 !important;
+    transform: scale(1.1);
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.5) !important;
+}
+
+.rotation-handle:active {
+    background: #1e7e34 !important;
+    cursor: grabbing !important;
+}
+
+/* Ensure proper layering */
+.leaflet-overlay-pane {
+    position: relative;
+}
+
+/* Custom cursor for dragging */
+.map-container.dragging {
+    cursor: move !important;
+}
+
+.map-container.dragging * {
+    cursor: move !important;
+}

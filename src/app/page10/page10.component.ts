@@ -25,6 +25,14 @@ declare module 'leaflet' {
   }
 }
 
+interface ResizeStartInfo {
+  mouseStart: { x: number, y: number };
+  scaleStart: number;
+  center: L.LatLng;
+  handleIndex: number;
+  anchorCorner?: { x: number, y: number };
+}
+
 export interface ImageConfig {
   fileName: string;
   aspectRatio: number;
@@ -66,7 +74,7 @@ export class Page10Component implements OnInit, AfterViewInit {
   public boundaryPolygonLayer?: L.Polygon;
   public imageOverlay?: L.ImageOverlay.Rotated;
   private drawControl: L.Control.Draw | null = null;
-
+  private rotationConnector: HTMLElement | null = null;
   public siteData: SiteData = {
     site: 'international',
     globalVar: { type: 'FeatureCollection', features: [] },
@@ -91,8 +99,8 @@ export class Page10Component implements OnInit, AfterViewInit {
   private isDragging: boolean = false;
   private dragStartLatLng: L.LatLng | null = null;
   private dragStartCenter: L.LatLng | null = null;
-  private dragMoveHandler?: (e: L.LeafletMouseEvent) => void;
-  private dragEndHandler?: () => void;
+  private dragMoveHandler?: (e: MouseEvent) => void;
+  private dragEndHandler?: (e: MouseEvent) => void;
   public extracting: boolean = false;
 
   private renderer = inject(Renderer2);
@@ -101,11 +109,11 @@ export class Page10Component implements OnInit, AfterViewInit {
 
   private resizeHandles: HTMLElement[] = [];
   private resizing: boolean = false;
-  private resizeStartInfo: { mouseStart: {x: number, y: number}, scaleStart: number, center: L.LatLng, handleIndex: number } | null = null;
+  private resizeStartInfo: ResizeStartInfo | null = null;
 
   private rotationHandle: HTMLElement | null = null;
   private rotating: boolean = false;
-  private rotateStartInfo: { mouseStart: {x: number, y: number}, angleStart: number, center: {x: number, y: number} } | null = null;
+  private rotateStartInfo: { mouseStart: { x: number, y: number }, angleStart: number, center: { x: number, y: number } } | null = null;
 
   ngOnInit(): void {
     this.pluginReady = this.loadScript('https://unpkg.com/leaflet-imageoverlay-rotated@0.1.4/Leaflet.ImageOverlay.Rotated.js');
@@ -244,10 +252,17 @@ export class Page10Component implements OnInit, AfterViewInit {
     const config = this.siteData.imageConfigs[this.activeImageType]!;
     const url = `${this.serverUrl}/images/${config.fileName}`;
     const corners = this.calculateImageCorners(config);
+
     this.imageOverlay.setUrl(url);
     this.imageOverlay.reposition(corners.topleft, corners.topright, corners.bottomleft);
     this.imageOverlay.setOpacity(config.opacity);
-    // --- Ensure clipping is applied after update ---
+
+    // Update interactive state and styling
+    this.imageOverlay.options.interactive = this.isEditMode;
+
+    this.updateImageBorder();
+
+    // Ensure clipping is applied after update in view mode
     if (!this.isEditMode) {
       this.applyClipping();
     }
@@ -266,17 +281,23 @@ export class Page10Component implements OnInit, AfterViewInit {
     this.imageOverlay = L.imageOverlay.rotated(
       imageUrl,
       corners.topleft, corners.topright, corners.bottomleft,
-      { opacity: config.opacity, interactive: true, bubblingMouseEvents: false }
+      {
+        opacity: config.opacity,
+        interactive: this.isEditMode,
+        bubblingMouseEvents: false,
+        // Add custom class for styling
+        className: this.isEditMode ? 'leaflet-image-edit-mode' : ''
+      }
     ).addTo(this.map);
 
     if (this.isEditMode) {
-      // Always set interactive and attach drag handler
+      // Set interactive and attach drag handler
       this.imageOverlay.options.interactive = true;
-      this.imageOverlay.off('mousedown');
       this.setupImageDrag();
       this.addResizeHandles();
+      this.updateImageBorder();
     } else {
-      // --- Ensure clipping is applied after creation ---
+      // Ensure clipping is applied after creation
       this.applyClipping();
     }
   }
@@ -539,47 +560,67 @@ export class Page10Component implements OnInit, AfterViewInit {
 
   private setupImageDrag(): void {
     if (!this.imageOverlay || !this.isEditMode) return;
+
     this.imageOverlay.off('mousedown');
     this.imageOverlay.on('mousedown', (e: L.LeafletMouseEvent) => {
       // Only start drag if not clicking a handle
       const target = e.originalEvent.target as HTMLElement;
-      if (target.classList.contains('resize-handle') || target.classList.contains('rotation-handle')) return;
+      if (target.classList.contains('resize-handle') ||
+        target.classList.contains('rotation-handle') ||
+        target.closest('.resize-handle') ||
+        target.closest('.rotation-handle')) {
+        return;
+      }
       if (!this.isEditMode) return;
       e.originalEvent.preventDefault();
+      e.originalEvent.stopPropagation();
       this.isDragging = true;
       this.dragStartLatLng = e.latlng;
       this.dragStartCenter = this.imageCenter ? L.latLng(this.imageCenter.lat, this.imageCenter.lng) : null;
-      this.dragMoveHandler = this.onImageDrag.bind(this);
-      this.dragEndHandler = this.onImageDragEnd.bind(this);
+      // Assign handlers as MouseEvent listeners
+      this.dragMoveHandler = this.onImageDrag as (e: MouseEvent) => void;
+      this.dragEndHandler = this.onImageDragEnd as (e: MouseEvent) => void;
       this.map.dragging.disable();
       this.map.getContainer().style.cursor = 'move';
-      this.map.on('mousemove', this.dragMoveHandler);
-      this.map.on('mouseup', this.dragEndHandler);
-      this.map.on('mouseout', this.dragEndHandler);
+      // Use document instead of map for better event handling
+      document.addEventListener('mousemove', this.dragMoveHandler!);
+      document.addEventListener('mouseup', this.dragEndHandler!);
+      document.addEventListener('mouseleave', this.dragEndHandler!);
     });
   }
 
-  private onImageDrag(e: L.LeafletMouseEvent): void {
+  private onImageDrag = (e: MouseEvent): void => {
     if (!this.isDragging || !this.dragStartLatLng || !this.dragStartCenter) return;
-    const newLatLng = e.latlng;
-    const latDelta = newLatLng.lat - this.dragStartLatLng.lat;
-    const lngDelta = newLatLng.lng - this.dragStartLatLng.lng;
-    this.imageCenter = L.latLng(this.dragStartCenter.lat + latDelta, this.dragStartCenter.lng + lngDelta);
+    // Convert mouse position to map coordinates
+    const mouseLatLng = this.map.mouseEventToLatLng(e as any);
+    const latDelta = mouseLatLng.lat - this.dragStartLatLng.lat;
+    const lngDelta = mouseLatLng.lng - this.dragStartLatLng.lng;
+    this.imageCenter = L.latLng(
+      this.dragStartCenter.lat + latDelta,
+      this.dragStartCenter.lng + lngDelta
+    );
     this.updateImageTransform();
+    this.updateImageBorder();
+    // Update handles/connector position after image move
+    if ((this as any)._resizeHandlesUpdate) {
+      (this as any)._resizeHandlesUpdate();
+    }
   }
 
-  private onImageDragEnd(): void {
-  if (!this.isDragging) return;
-  this.isDragging = false;
-  if (this.dragMoveHandler) { this.map.off('mousemove', this.dragMoveHandler); }
-  if (this.dragEndHandler) {
-    this.map.off('mouseup', this.dragEndHandler);
-    this.map.off('mouseout', this.dragEndHandler);
-  }
-  this.map.dragging.enable();
-  this.map.getContainer().style.cursor = '';
-  // Ensure image is inside boundary after drag
-  this.validateAndCorrectImagePosition();
+  private onImageDragEnd = (e: MouseEvent): void => {
+    if (!this.isDragging) return;
+    this.isDragging = false;
+    if (this.dragMoveHandler) {
+      document.removeEventListener('mousemove', this.dragMoveHandler);
+    }
+    if (this.dragEndHandler) {
+      document.removeEventListener('mouseup', this.dragEndHandler);
+      document.removeEventListener('mouseleave', this.dragEndHandler);
+    }
+    this.map.dragging.enable();
+    this.map.getContainer().style.cursor = '';
+    // Ensure image is inside boundary after drag
+    this.validateAndCorrectImagePosition();
   }
 
   private calculateInitialImageDimensions(aspectRatio: number): { width: number, height: number } {
@@ -592,10 +633,18 @@ export class Page10Component implements OnInit, AfterViewInit {
 
   public onScaleChange(): void {
     this.updateImageTransform();
+    this.updateImageBorder();
+    if ((this as any)._resizeHandlesUpdate) {
+      (this as any)._resizeHandlesUpdate();
+    }
     this.validateAndCorrectImagePosition();
   }
   public onRotationChange(): void {
     this.updateImageTransform();
+    this.updateImageBorder();
+    if ((this as any)._resizeHandlesUpdate) {
+      (this as any)._resizeHandlesUpdate();
+    }
     this.validateAndCorrectImagePosition();
   }
   public toggleControlsModal(): void { this.showControlsModal = !this.showControlsModal; }
@@ -604,19 +653,25 @@ export class Page10Component implements OnInit, AfterViewInit {
   public enableEditing(): void {
     this.isEditMode = true;
     this.setupDrawControls();
+
     if (this.imageOverlay) {
-      // Always set interactive and re-attach drag handler
+      // Set interactive and re-attach drag handler
       this.imageOverlay.options.interactive = true;
       this.removeClipping();
       this.map.off('move', this.applyClipping, this);
       this.imageOverlay.off('mousedown');
       this.setupImageDrag();
       this.addResizeHandles();
+      this.updateImageBorder();
     }
+
     if (this.boundaryPolygonLayer) {
-      if (!this.drawnItems.hasLayer(this.boundaryPolygonLayer)) this.drawnItems.addLayer(this.boundaryPolygonLayer);
+      if (!this.drawnItems.hasLayer(this.boundaryPolygonLayer)) {
+        this.drawnItems.addLayer(this.boundaryPolygonLayer);
+      }
       this.setupBoundaryInteraction(this.boundaryPolygonLayer);
     }
+
     this.cdr.detectChanges();
   }
 
@@ -625,12 +680,22 @@ export class Page10Component implements OnInit, AfterViewInit {
       this.map.removeControl(this.drawControl);
       this.drawControl = null;
     }
+
     if (this.imageOverlay) {
       this.imageOverlay.options.interactive = false;
       this.imageOverlay.off('mousedown');
       this.applyClipping();
       this.map.on('move', this.applyClipping, this);
       this.removeResizeHandles();
+
+      // Remove red border
+      setTimeout(() => {
+        const imageElement = this.imageOverlay?.getElement();
+        if (imageElement) {
+          imageElement.style.border = 'none';
+          imageElement.style.boxShadow = 'none';
+        }
+      }, 100);
     }
   }
 
@@ -883,10 +948,17 @@ export class Page10Component implements OnInit, AfterViewInit {
     }, 'image/png');
   }
 
-  /**
-   * Alternative method using Leaflet's built-in screenshot capabilities
-   * This method captures just the map tiles within the boundary
-   */
+  private updateRotationConnector(x1: number, y1: number, x2: number, y2: number): void {
+    if (!this.rotationConnector) return;
+
+    const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+
+    this.rotationConnector.style.left = `${x1}px`;
+    this.rotationConnector.style.top = `${y1}px`;
+    this.rotationConnector.style.width = `${length}px`;
+    this.rotationConnector.style.transform = `rotate(${angle}rad)`;
+  }
   public async extractMapImageAlternative(): Promise<void> {
     if (!this.boundaryPolygonLayer || this.extracting) {
       console.warn('No boundary polygon found or extraction already in progress');
@@ -937,84 +1009,170 @@ export class Page10Component implements OnInit, AfterViewInit {
       this.extracting = false;
     }
   }
+  private createRotationConnector(): void {
+    if (this.rotationConnector) {
+      this.rotationConnector.remove();
+    }
 
+    this.rotationConnector = document.createElement('div');
+    this.rotationConnector.className = 'rotation-connector';
+    Object.assign(this.rotationConnector.style, {
+      position: 'absolute',
+      height: '2px',
+      background: 'rgba(40, 167, 69, 0.6)',
+      zIndex: 10000,
+      pointerEvents: 'none',
+      transformOrigin: 'left center'
+    });
+
+    document.body.appendChild(this.rotationConnector);
+  }
   /**
    * Add resize handles to the image overlay for scaling
    */
   private addResizeHandles(): void {
     this.removeResizeHandles();
     if (!this.imageOverlay || !this.isEditMode) return;
+
     const imageElement = this.imageOverlay.getElement();
     if (!imageElement) return;
+
     const handlePositions = [
-      { x: 0, y: 0 },   // top-left
-      { x: 1, y: 0 },   // top-right
-      { x: 1, y: 1 },   // bottom-right
-      { x: 0, y: 1 }    // bottom-left
+      { x: 0, y: 0, cursor: 'nw-resize' },   // top-left
+      { x: 1, y: 0, cursor: 'ne-resize' },   // top-right
+      { x: 1, y: 1, cursor: 'se-resize' },   // bottom-right
+      { x: 0, y: 1, cursor: 'sw-resize' }    // bottom-left
     ];
-    const handleSize = 14;
+
+    const handleSize = 16;
+    const rotationHandleOffset = 25; // Distance from corner for rotation handle
+
     const updateHandles = () => {
       const rect = imageElement.getBoundingClientRect();
+      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+      // Update resize handles
       handlePositions.forEach((pos, i) => {
         const handle = this.resizeHandles[i];
         if (!handle) return;
-        handle.style.left = `${rect.left + pos.x * rect.width - handleSize/2}px`;
-        handle.style.top = `${rect.top + pos.y * rect.height - handleSize/2}px`;
+
+        const left = rect.left + scrollX + pos.x * rect.width - handleSize / 2;
+        const top = rect.top + scrollY + pos.y * rect.height - handleSize / 2;
+
+        handle.style.left = `${left}px`;
+        handle.style.top = `${top}px`;
       });
-      // Update rotation handle position
+
+      // Update rotation handle - attached to top-right corner
       if (this.rotationHandle) {
-        const topCenter = { x: rect.left + rect.width/2, y: rect.top - 28 };
-        this.rotationHandle.style.left = `${topCenter.x - 12}px`;
-        this.rotationHandle.style.top = `${topCenter.y - 12}px`;
+        const topRightX = rect.left + scrollX + rect.width - handleSize / 2;
+        const topRightY = rect.top + scrollY - handleSize / 2;
+
+        // Position rotation handle at an offset from top-right corner
+        const rotationX = topRightX + rotationHandleOffset * Math.cos(-Math.PI / 4);
+        const rotationY = topRightY + rotationHandleOffset * Math.sin(-Math.PI / 4);
+
+        this.rotationHandle.style.left = `${rotationX}px`;
+        this.rotationHandle.style.top = `${rotationY}px`;
+
+        // Add a connecting line visual indicator
+        this.updateRotationConnector(topRightX + handleSize / 2, topRightY + handleSize / 2, rotationX + 12, rotationY + 12);
       }
     };
+
+    // Create resize handles
     this.resizeHandles = handlePositions.map((pos, i) => {
       const handle = document.createElement('div');
       handle.className = 'resize-handle';
       Object.assign(handle.style, {
-        position: 'fixed',
+        position: 'absolute',
         width: `${handleSize}px`,
         height: `${handleSize}px`,
         background: '#fff',
-        border: '2px solid #007bff',
+        border: '3px solid #007bff',
         borderRadius: '50%',
-        zIndex: 10000,
-        cursor: 'nwse-resize',
-        boxShadow: '0 0 2px #333',
-        pointerEvents: 'auto', // Only the handle itself is interactive
+        zIndex: 10001,
+        cursor: pos.cursor,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        pointerEvents: 'auto',
+        userSelect: 'none',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease'
       });
-      handle.addEventListener('mousedown', (e) => this.onResizeHandleMouseDown(e, i));
+
+      // Add corner indicator for better visual feedback
+      const indicator = document.createElement('div');
+      indicator.style.cssText = `
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 6px;
+      height: 6px;
+      background: #007bff;
+      border-radius: 50%;
+    `;
+      handle.appendChild(indicator);
+
+      // Prevent event bubbling to image
+      handle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        this.onResizeHandleMouseDown(e, i);
+      });
+
       document.body.appendChild(handle);
       return handle;
     });
-    // Add rotation handle
+
+    // Create rotation handle - attached to top-right corner
     this.rotationHandle = document.createElement('div');
     this.rotationHandle.className = 'rotation-handle';
     Object.assign(this.rotationHandle.style, {
-      position: 'fixed',
+      position: 'absolute',
       width: '24px',
       height: '24px',
       background: '#fff',
-      border: '2px solid #28a745',
+      border: '3px solid #28a745',
       borderRadius: '50%',
-      zIndex: 10001,
+      zIndex: 10002,
       cursor: 'grab',
-      boxShadow: '0 0 2px #333',
-      pointerEvents: 'auto', // Only the handle itself is interactive
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+      pointerEvents: 'auto',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      userSelect: 'none',
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease'
     });
-    this.rotationHandle.title = 'Rotate';
-    this.rotationHandle.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2a6 6 0 1 1-6 6" fill="none" stroke="#28a745" stroke-width="2"/><polygon points="8,0 11,4 5,4" fill="#28a745"/></svg>`;
-    this.rotationHandle.addEventListener('mousedown', this.onRotationHandleMouseDown);
+
+    this.rotationHandle.title = 'Rotate Image';
+    this.rotationHandle.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 16 16">
+      <path d="M8 2a6 6 0 1 1-6 6" fill="none" stroke="#28a745" stroke-width="2"/>
+      <polygon points="8,0 10,3 6,3" fill="#28a745"/>
+    </svg>
+  `;
+
+    // Prevent event bubbling to image
+    this.rotationHandle.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.onRotationHandleMouseDown(e);
+    });
+
     document.body.appendChild(this.rotationHandle);
+
+    // Create connector line element
+    this.createRotationConnector();
+
     updateHandles();
-    window.addEventListener('mousemove', this.onResizeHandleMouseMove);
-    window.addEventListener('mouseup', this.onResizeHandleMouseUp);
+
+    // Event listeners for handle updates
+    window.addEventListener('scroll', updateHandles);
     window.addEventListener('resize', updateHandles);
-    // Also update on map move/zoom
-    this.map.on('move zoom', updateHandles);
+    this.map.on('move zoom viewreset', updateHandles);
+
     // Save for cleanup
     (this as any)._resizeHandlesUpdate = updateHandles;
   }
@@ -1022,20 +1180,50 @@ export class Page10Component implements OnInit, AfterViewInit {
   private removeResizeHandles(): void {
     this.resizeHandles.forEach(h => h.remove());
     this.resizeHandles = [];
-    if (this.rotationHandle) { this.rotationHandle.remove(); this.rotationHandle = null; }
+
+    if (this.rotationHandle) {
+      this.rotationHandle.remove();
+      this.rotationHandle = null;
+    }
+
+    if (this.rotationConnector) {
+      this.rotationConnector.remove();
+      this.rotationConnector = null;
+    }
+
+    // Remove event listeners
     window.removeEventListener('mousemove', this.onResizeHandleMouseMove);
     window.removeEventListener('mouseup', this.onResizeHandleMouseUp);
     window.removeEventListener('mousemove', this.onRotationHandleMouseMove);
     window.removeEventListener('mouseup', this.onRotationHandleMouseUp);
+    window.removeEventListener('scroll', (this as any)._resizeHandlesUpdate);
     window.removeEventListener('resize', (this as any)._resizeHandlesUpdate);
+
     if (this.map && (this as any)._resizeHandlesUpdate) {
-      this.map.off('move zoom', (this as any)._resizeHandlesUpdate);
+      this.map.off('move zoom viewreset', (this as any)._resizeHandlesUpdate);
     }
+
     (this as any)._resizeHandlesUpdate = undefined;
     this.resizing = false;
     this.resizeStartInfo = null;
     this.rotating = false;
     this.rotateStartInfo = null;
+  }
+
+  /**
+   * Updates the red border and box shadow for the image overlay in edit mode
+   */
+  private updateImageBorder(): void {
+    if (!this.imageOverlay) return;
+    const imageElement = this.imageOverlay.getElement();
+    if (!imageElement) return;
+    if (this.isEditMode) {
+      imageElement.style.border = '3px solid #dc3545';
+      imageElement.style.boxShadow = '0 0 10px rgba(220, 53, 69, 0.5)';
+    } else {
+      imageElement.style.border = 'none';
+      imageElement.style.boxShadow = 'none';
+    }
   }
 
   private onRotationHandleMouseDown = (e: MouseEvent) => {
@@ -1046,89 +1234,140 @@ export class Page10Component implements OnInit, AfterViewInit {
     const imageElement = this.imageOverlay.getElement();
     if (!imageElement) return;
     const rect = imageElement.getBoundingClientRect();
-    const center = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+    // Center of the image
+    const center = {
+      x: rect.left + scrollX + rect.width / 2,
+      y: rect.top + scrollY + rect.height / 2
+    };
     this.rotateStartInfo = {
-      mouseStart: { x: e.clientX, y: e.clientY },
+      mouseStart: { x: e.pageX, y: e.pageY },
       angleStart: this.imageRotation,
       center
     };
-    document.body.style.cursor = 'crosshair';
+    document.body.style.cursor = 'grabbing';
+    if (this.rotationHandle) this.rotationHandle.style.cursor = 'grabbing';
     window.addEventListener('mousemove', this.onRotationHandleMouseMove);
     window.addEventListener('mouseup', this.onRotationHandleMouseUp);
   };
 
   private onRotationHandleMouseMove = (e: MouseEvent) => {
-    if (!this.rotating || !this.rotateStartInfo) return;
-    if (!this.imageOverlay) return;
+    if (!this.rotating || !this.rotateStartInfo || !this.imageOverlay) return;
     const { mouseStart, angleStart, center } = this.rotateStartInfo;
+    // Calculate angle from center to mouse positions
     const startAngle = Math.atan2(mouseStart.y - center.y, mouseStart.x - center.x);
-    const currAngle = Math.atan2(e.clientY - center.y, e.clientX - center.x);
-    let delta = currAngle - startAngle;
-    let deg = angleStart + (delta * 180 / Math.PI);
-    // Normalize
-    deg = ((deg % 360) + 360) % 360;
-    this.imageRotation = deg;
+    const currentAngle = Math.atan2(e.pageY - center.y, e.pageX - center.x);
+    // Calculate rotation delta in degrees
+    let deltaAngle = (currentAngle - startAngle) * (180 / Math.PI);
+    let newRotation = angleStart + deltaAngle;
+    // Normalize angle to 0-360 degrees
+    newRotation = ((newRotation % 360) + 360) % 360;
+    this.imageRotation = newRotation;
     this.updateImageTransform();
+    this.updateImageBorder();
+    if ((this as any)._resizeHandlesUpdate) {
+      (this as any)._resizeHandlesUpdate();
+    }
     this.validateAndCorrectImagePosition();
   };
 
   private onRotationHandleMouseUp = (e: MouseEvent) => {
     if (!this.rotating) return;
+
     this.rotating = false;
     this.rotateStartInfo = null;
+
     document.body.style.cursor = '';
+    if (this.rotationHandle) {
+      this.rotationHandle.style.cursor = 'grab';
+    }
+
     window.removeEventListener('mousemove', this.onRotationHandleMouseMove);
     window.removeEventListener('mouseup', this.onRotationHandleMouseUp);
   };
 
-private onResizeHandleMouseDown = (e: MouseEvent, handleIndex: number) => {
-  if (!this.isEditMode || !this.imageOverlay) return;
-  e.preventDefault();
-  e.stopPropagation();
-  this.resizing = true;
-  const imageElement = this.imageOverlay.getElement();
-  if (!imageElement) return;
-  const rect = imageElement.getBoundingClientRect();
-  this.resizeStartInfo = {
-    mouseStart: { x: e.clientX, y: e.clientY },
-    scaleStart: this.imageScale,
-    center: this.imageCenter ? L.latLng(this.imageCenter.lat, this.imageCenter.lng) : L.latLng(0,0),
-    handleIndex
+  private onResizeHandleMouseDown = (e: MouseEvent, handleIndex: number) => {
+    if (!this.isEditMode || !this.imageOverlay) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    this.resizing = true;
+
+    const imageElement = this.imageOverlay.getElement();
+    if (!imageElement) return;
+
+    const rect = imageElement.getBoundingClientRect();
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+    // Get the opposite corner as the anchor point
+    const corners = [
+      { x: rect.left + scrollX, y: rect.top + scrollY },                    // top-left
+      { x: rect.left + scrollX + rect.width, y: rect.top + scrollY },       // top-right
+      { x: rect.left + scrollX + rect.width, y: rect.top + scrollY + rect.height }, // bottom-right
+      { x: rect.left + scrollX, y: rect.top + scrollY + rect.height }       // bottom-left
+    ];
+
+    const oppositeCornerIndex = (handleIndex + 2) % 4;
+    const anchorCorner = corners[oppositeCornerIndex];
+
+    this.resizeStartInfo = {
+      mouseStart: { x: e.pageX, y: e.pageY },
+      scaleStart: this.imageScale,
+      center: this.imageCenter ? L.latLng(this.imageCenter.lat, this.imageCenter.lng) : L.latLng(0, 0),
+      handleIndex,
+      anchorCorner
+    };
+
+    // Set appropriate cursor
+    const cursors = ['nw-resize', 'ne-resize', 'se-resize', 'sw-resize'];
+    document.body.style.cursor = cursors[handleIndex];
+
+    window.addEventListener('mousemove', this.onResizeHandleMouseMove);
+    window.addEventListener('mouseup', this.onResizeHandleMouseUp);
   };
-  document.body.style.cursor = 'nwse-resize';
-};
 
-private onResizeHandleMouseMove = (e: MouseEvent) => {
-  if (!this.resizing || !this.resizeStartInfo) return;
-  if (!this.imageOverlay) return;
-  const imageElement = this.imageOverlay.getElement();
-  if (!imageElement) return;
-  const rect = imageElement.getBoundingClientRect();
-  const { mouseStart, scaleStart, handleIndex } = this.resizeStartInfo;
-  // Calculate drag distance from the opposite corner
-  const corners = [
-    { x: rect.left, y: rect.top },
-    { x: rect.right, y: rect.top },
-    { x: rect.right, y: rect.bottom },
-    { x: rect.left, y: rect.bottom }
-  ];
-  const oppIndex = (handleIndex + 2) % 4;
-  const oppCorner = corners[oppIndex];
-  const startDist = Math.hypot(mouseStart.x - oppCorner.x, mouseStart.y - oppCorner.y);
-  const currDist = Math.hypot(e.clientX - oppCorner.x, e.clientY - oppCorner.y);
-  let scale = scaleStart * (currDist / (startDist || 1));
-  // Clamp scale
-  scale = Math.max(0.1, Math.min(10, scale));
-  this.imageScale = scale;
-  this.updateImageTransform();
-  this.validateAndCorrectImagePosition();
-};
+  private onResizeHandleMouseMove = (e: MouseEvent) => {
+    if (!this.resizing || !this.resizeStartInfo || !this.imageOverlay) return;
+    const imageElement = this.imageOverlay.getElement();
+    if (!imageElement) return;
+    const { mouseStart, scaleStart, anchorCorner } = this.resizeStartInfo;
+    if (!anchorCorner) return;
+    // Calculate distances from anchor corner
+    const startDistance = Math.hypot(
+      mouseStart.x - anchorCorner.x,
+      mouseStart.y - anchorCorner.y
+    );
+    const currentDistance = Math.hypot(
+      e.pageX - anchorCorner.x,
+      e.pageY - anchorCorner.y
+    );
+    if (startDistance === 0) return;
+    // Calculate scale factor
+    let scaleFactor = currentDistance / startDistance;
+    let newScale = scaleStart * scaleFactor;
+    // Clamp scale to reasonable limits
+    newScale = Math.max(0.1, Math.min(10, newScale));
+    this.imageScale = newScale;
+    this.updateImageTransform();
+    this.updateImageBorder();
+    if ((this as any)._resizeHandlesUpdate) {
+      (this as any)._resizeHandlesUpdate();
+    }
+    this.validateAndCorrectImagePosition();
+  };
 
-private onResizeHandleMouseUp = (e: MouseEvent) => {
-  if (!this.resizing) return;
-  this.resizing = false;
-  this.resizeStartInfo = null;
-  document.body.style.cursor = '';
-  // Optionally, save config here
-};
+  private onResizeHandleMouseUp = (e: MouseEvent) => {
+    if (!this.resizing) return;
+
+    this.resizing = false;
+    this.resizeStartInfo = null;
+
+    document.body.style.cursor = '';
+
+    window.removeEventListener('mousemove', this.onResizeHandleMouseMove);
+    window.removeEventListener('mouseup', this.onResizeHandleMouseUp);
+  };
 }
