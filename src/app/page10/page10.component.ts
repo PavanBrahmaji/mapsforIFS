@@ -99,8 +99,30 @@ export class Page10Component implements OnInit, AfterViewInit {
   private cdr = inject(ChangeDetectorRef);
   private apiService = inject(ApiService);
 
+  private resizeHandles: HTMLElement[] = [];
+  private resizing: boolean = false;
+  private resizeStartInfo: { mouseStart: {x: number, y: number}, scaleStart: number, center: L.LatLng, handleIndex: number } | null = null;
+
+  private rotationHandle: HTMLElement | null = null;
+  private rotating: boolean = false;
+  private rotateStartInfo: { mouseStart: {x: number, y: number}, angleStart: number, center: {x: number, y: number} } | null = null;
+
   ngOnInit(): void {
     this.pluginReady = this.loadScript('https://unpkg.com/leaflet-imageoverlay-rotated@0.1.4/Leaflet.ImageOverlay.Rotated.js');
+    // Inject styles for resize handles (only once)
+    if (!document.getElementById('resize-handle-style')) {
+      const style = document.createElement('style');
+      style.id = 'resize-handle-style';
+      style.innerHTML = `
+        .resize-handle {
+          transition: background 0.2s;
+        }
+        .resize-handle:hover {
+          background: #007bff;
+        }
+      `;
+      document.head.appendChild(style);
+    }
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -252,6 +274,7 @@ export class Page10Component implements OnInit, AfterViewInit {
       this.imageOverlay.options.interactive = true;
       this.imageOverlay.off('mousedown');
       this.setupImageDrag();
+      this.addResizeHandles();
     } else {
       // --- Ensure clipping is applied after creation ---
       this.applyClipping();
@@ -518,6 +541,9 @@ export class Page10Component implements OnInit, AfterViewInit {
     if (!this.imageOverlay || !this.isEditMode) return;
     this.imageOverlay.off('mousedown');
     this.imageOverlay.on('mousedown', (e: L.LeafletMouseEvent) => {
+      // Only start drag if not clicking a handle
+      const target = e.originalEvent.target as HTMLElement;
+      if (target.classList.contains('resize-handle') || target.classList.contains('rotation-handle')) return;
       if (!this.isEditMode) return;
       e.originalEvent.preventDefault();
       this.isDragging = true;
@@ -585,6 +611,7 @@ export class Page10Component implements OnInit, AfterViewInit {
       this.map.off('move', this.applyClipping, this);
       this.imageOverlay.off('mousedown');
       this.setupImageDrag();
+      this.addResizeHandles();
     }
     if (this.boundaryPolygonLayer) {
       if (!this.drawnItems.hasLayer(this.boundaryPolygonLayer)) this.drawnItems.addLayer(this.boundaryPolygonLayer);
@@ -603,6 +630,7 @@ export class Page10Component implements OnInit, AfterViewInit {
       this.imageOverlay.off('mousedown');
       this.applyClipping();
       this.map.on('move', this.applyClipping, this);
+      this.removeResizeHandles();
     }
   }
 
@@ -909,4 +937,198 @@ export class Page10Component implements OnInit, AfterViewInit {
       this.extracting = false;
     }
   }
+
+  /**
+   * Add resize handles to the image overlay for scaling
+   */
+  private addResizeHandles(): void {
+    this.removeResizeHandles();
+    if (!this.imageOverlay || !this.isEditMode) return;
+    const imageElement = this.imageOverlay.getElement();
+    if (!imageElement) return;
+    const handlePositions = [
+      { x: 0, y: 0 },   // top-left
+      { x: 1, y: 0 },   // top-right
+      { x: 1, y: 1 },   // bottom-right
+      { x: 0, y: 1 }    // bottom-left
+    ];
+    const handleSize = 14;
+    const updateHandles = () => {
+      const rect = imageElement.getBoundingClientRect();
+      handlePositions.forEach((pos, i) => {
+        const handle = this.resizeHandles[i];
+        if (!handle) return;
+        handle.style.left = `${rect.left + pos.x * rect.width - handleSize/2}px`;
+        handle.style.top = `${rect.top + pos.y * rect.height - handleSize/2}px`;
+      });
+      // Update rotation handle position
+      if (this.rotationHandle) {
+        const topCenter = { x: rect.left + rect.width/2, y: rect.top - 28 };
+        this.rotationHandle.style.left = `${topCenter.x - 12}px`;
+        this.rotationHandle.style.top = `${topCenter.y - 12}px`;
+      }
+    };
+    this.resizeHandles = handlePositions.map((pos, i) => {
+      const handle = document.createElement('div');
+      handle.className = 'resize-handle';
+      Object.assign(handle.style, {
+        position: 'fixed',
+        width: `${handleSize}px`,
+        height: `${handleSize}px`,
+        background: '#fff',
+        border: '2px solid #007bff',
+        borderRadius: '50%',
+        zIndex: 10000,
+        cursor: 'nwse-resize',
+        boxShadow: '0 0 2px #333',
+        pointerEvents: 'auto', // Only the handle itself is interactive
+      });
+      handle.addEventListener('mousedown', (e) => this.onResizeHandleMouseDown(e, i));
+      document.body.appendChild(handle);
+      return handle;
+    });
+    // Add rotation handle
+    this.rotationHandle = document.createElement('div');
+    this.rotationHandle.className = 'rotation-handle';
+    Object.assign(this.rotationHandle.style, {
+      position: 'fixed',
+      width: '24px',
+      height: '24px',
+      background: '#fff',
+      border: '2px solid #28a745',
+      borderRadius: '50%',
+      zIndex: 10001,
+      cursor: 'grab',
+      boxShadow: '0 0 2px #333',
+      pointerEvents: 'auto', // Only the handle itself is interactive
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    });
+    this.rotationHandle.title = 'Rotate';
+    this.rotationHandle.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2a6 6 0 1 1-6 6" fill="none" stroke="#28a745" stroke-width="2"/><polygon points="8,0 11,4 5,4" fill="#28a745"/></svg>`;
+    this.rotationHandle.addEventListener('mousedown', this.onRotationHandleMouseDown);
+    document.body.appendChild(this.rotationHandle);
+    updateHandles();
+    window.addEventListener('mousemove', this.onResizeHandleMouseMove);
+    window.addEventListener('mouseup', this.onResizeHandleMouseUp);
+    window.addEventListener('resize', updateHandles);
+    // Also update on map move/zoom
+    this.map.on('move zoom', updateHandles);
+    // Save for cleanup
+    (this as any)._resizeHandlesUpdate = updateHandles;
+  }
+
+  private removeResizeHandles(): void {
+    this.resizeHandles.forEach(h => h.remove());
+    this.resizeHandles = [];
+    if (this.rotationHandle) { this.rotationHandle.remove(); this.rotationHandle = null; }
+    window.removeEventListener('mousemove', this.onResizeHandleMouseMove);
+    window.removeEventListener('mouseup', this.onResizeHandleMouseUp);
+    window.removeEventListener('mousemove', this.onRotationHandleMouseMove);
+    window.removeEventListener('mouseup', this.onRotationHandleMouseUp);
+    window.removeEventListener('resize', (this as any)._resizeHandlesUpdate);
+    if (this.map && (this as any)._resizeHandlesUpdate) {
+      this.map.off('move zoom', (this as any)._resizeHandlesUpdate);
+    }
+    (this as any)._resizeHandlesUpdate = undefined;
+    this.resizing = false;
+    this.resizeStartInfo = null;
+    this.rotating = false;
+    this.rotateStartInfo = null;
+  }
+
+  private onRotationHandleMouseDown = (e: MouseEvent) => {
+    if (!this.isEditMode || !this.imageOverlay) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.rotating = true;
+    const imageElement = this.imageOverlay.getElement();
+    if (!imageElement) return;
+    const rect = imageElement.getBoundingClientRect();
+    const center = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+    this.rotateStartInfo = {
+      mouseStart: { x: e.clientX, y: e.clientY },
+      angleStart: this.imageRotation,
+      center
+    };
+    document.body.style.cursor = 'crosshair';
+    window.addEventListener('mousemove', this.onRotationHandleMouseMove);
+    window.addEventListener('mouseup', this.onRotationHandleMouseUp);
+  };
+
+  private onRotationHandleMouseMove = (e: MouseEvent) => {
+    if (!this.rotating || !this.rotateStartInfo) return;
+    if (!this.imageOverlay) return;
+    const { mouseStart, angleStart, center } = this.rotateStartInfo;
+    const startAngle = Math.atan2(mouseStart.y - center.y, mouseStart.x - center.x);
+    const currAngle = Math.atan2(e.clientY - center.y, e.clientX - center.x);
+    let delta = currAngle - startAngle;
+    let deg = angleStart + (delta * 180 / Math.PI);
+    // Normalize
+    deg = ((deg % 360) + 360) % 360;
+    this.imageRotation = deg;
+    this.updateImageTransform();
+    this.validateAndCorrectImagePosition();
+  };
+
+  private onRotationHandleMouseUp = (e: MouseEvent) => {
+    if (!this.rotating) return;
+    this.rotating = false;
+    this.rotateStartInfo = null;
+    document.body.style.cursor = '';
+    window.removeEventListener('mousemove', this.onRotationHandleMouseMove);
+    window.removeEventListener('mouseup', this.onRotationHandleMouseUp);
+  };
+
+private onResizeHandleMouseDown = (e: MouseEvent, handleIndex: number) => {
+  if (!this.isEditMode || !this.imageOverlay) return;
+  e.preventDefault();
+  e.stopPropagation();
+  this.resizing = true;
+  const imageElement = this.imageOverlay.getElement();
+  if (!imageElement) return;
+  const rect = imageElement.getBoundingClientRect();
+  this.resizeStartInfo = {
+    mouseStart: { x: e.clientX, y: e.clientY },
+    scaleStart: this.imageScale,
+    center: this.imageCenter ? L.latLng(this.imageCenter.lat, this.imageCenter.lng) : L.latLng(0,0),
+    handleIndex
+  };
+  document.body.style.cursor = 'nwse-resize';
+};
+
+private onResizeHandleMouseMove = (e: MouseEvent) => {
+  if (!this.resizing || !this.resizeStartInfo) return;
+  if (!this.imageOverlay) return;
+  const imageElement = this.imageOverlay.getElement();
+  if (!imageElement) return;
+  const rect = imageElement.getBoundingClientRect();
+  const { mouseStart, scaleStart, handleIndex } = this.resizeStartInfo;
+  // Calculate drag distance from the opposite corner
+  const corners = [
+    { x: rect.left, y: rect.top },
+    { x: rect.right, y: rect.top },
+    { x: rect.right, y: rect.bottom },
+    { x: rect.left, y: rect.bottom }
+  ];
+  const oppIndex = (handleIndex + 2) % 4;
+  const oppCorner = corners[oppIndex];
+  const startDist = Math.hypot(mouseStart.x - oppCorner.x, mouseStart.y - oppCorner.y);
+  const currDist = Math.hypot(e.clientX - oppCorner.x, e.clientY - oppCorner.y);
+  let scale = scaleStart * (currDist / (startDist || 1));
+  // Clamp scale
+  scale = Math.max(0.1, Math.min(10, scale));
+  this.imageScale = scale;
+  this.updateImageTransform();
+  this.validateAndCorrectImagePosition();
+};
+
+private onResizeHandleMouseUp = (e: MouseEvent) => {
+  if (!this.resizing) return;
+  this.resizing = false;
+  this.resizeStartInfo = null;
+  document.body.style.cursor = '';
+  // Optionally, save config here
+};
 }
