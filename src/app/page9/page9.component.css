@@ -1,0 +1,777 @@
+/* Global Styles */
+*,
+*:before,
+*:after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+}
+
+/* Map Container */
+.map-container {
+    height: 100vh;
+    width: 100vw;
+    background-color: #f0f0f0;
+}
+
+/* Controls Modal */
+.controls-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: visibility 0.3s ease, opacity 0.3s ease;
+}
+
+.controls-modal.open {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+.modal-content {
+    position: absolute;
+    top: 80px;
+    right: 30px;
+    width: 350px;
+    max-width: calc(100vw - 60px);
+    max-height: calc(100vh - 120px);
+    background-color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    transform: translateY(-20px) scale(0.95);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 2px solid #e9ecef;
+}
+
+.controls-modal.open .modal-content {
+    transform: translateY(0) scale(1);
+}
+
+/* Modal Sections */
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.4rem;
+    color: #495057;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #6c757d;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.close-button:hover {
+    color: #000000;
+    background-color: #e9ecef;
+}
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 20px 24px;
+    border-top: 1px solid #e9ecef;
+}
+
+/* Control Group */
+.control-group {
+    margin-bottom: 24px;
+}
+
+.control-group label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 600;
+    color: #495057;
+}
+
+.control-input {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.control-input input[type="range"] {
+    flex-grow: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: #e9ecef;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.control-input input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+}
+
+.value-input {
+    width: 80px;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-family: "Courier New", Courier, monospace;
+    text-align: right;
+}
+
+/* Button Styles */
+.btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #6c757d;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    color: #ffffff;
+}
+
+.btn-primary:hover:not([disabled]) {
+    background-color: #0056b3;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    color: #212529;
+    font-weight: bold;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+}
+
+.btn-warning:hover:not([disabled]) {
+    background-color: #e0a800;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4);
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    color: #ffffff;
+}
+
+.btn-danger:hover:not([disabled]) {
+    background-color: #c82333;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: #ffffff;
+}
+
+.btn-secondary:hover:not([disabled]) {
+    background-color: #5a6268;
+}
+
+/* Floating Controls */
+.floating-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.floating-controls .btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #6c757d;
+}
+
+.control-toggle-btn {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    width: 56px;
+    height: 56px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.control-toggle-btn:hover:not([disabled]) {
+    transform: translateY(-2px);
+}
+
+.control-toggle-btn .icon {
+    font-size: 24px;
+}
+
+/* Upload Modal Styles */
+.upload-section {
+    margin-bottom: 24px;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.upload-section label {
+    display: block;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.upload-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.upload-control .file-name {
+    flex-grow: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #ced4da;
+    font-size: 0.85rem;
+    color: #6c757d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 12px;
+}
+
+/* Floating Dropdown Styles */
+.floating-dropdown-container {
+    background-color: #ffffff;
+    padding: 8px 12px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border: 1px solid #dee2e6;
+    min-width: 170px;
+}
+
+.floating-dropdown-container label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.form-select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    background-color: #ffffff;
+}
+
+.form-select:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+}
+
+.btn-remove {
+    width: 100%;
+    margin-top: 10px;
+}
+
+/* Enhanced CSS fixes for image dragging and boundary clipping */
+.leaflet-image-layer {
+  transition: border 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 4px;
+  pointer-events: auto !important;
+  position: relative;
+}
+
+.map-container.edit-mode .leaflet-image-layer {
+  cursor: move;
+  pointer-events: auto !important;
+}
+
+.map-container:not(.edit-mode) .leaflet-image-layer {
+  cursor: default;
+  pointer-events: none !important;
+}
+
+.leaflet-image-layer > img {
+  pointer-events: none !important;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.resize-handle {
+  position: absolute !important;
+  width: 12px !important;
+  height: 12px !important;
+  background-color: #FF0000 !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 50% !important;
+  z-index: 1001 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.2s ease !important;
+  pointer-events: auto !important;
+  user-select: none !important;
+}
+
+.resize-handle:hover {
+  transform: scale(1.2) !important;
+  background-color: #FF3333 !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+.resize-handle:active {
+  transform: scale(1.1) !important;
+  background-color: #CC0000 !important;
+}
+
+.rotate-handle {
+  position: absolute !important;
+  width: 16px !important;
+  height: 16px !important;
+  background-color: #00AA00 !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 50% !important;
+  z-index: 1002 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  pointer-events: auto !important;
+  user-select: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 10px !important;
+  color: white !important;
+  font-weight: bold !important;
+  cursor: grab !important;
+}
+
+.rotate-handle:hover {
+  transform: scale(1.1) !important;
+  background-color: #00CC00 !important;
+  cursor: grabbing !important;
+}
+
+.rotate-handle:active {
+  cursor: grabbing !important;
+  transform: scale(1.05) !important;
+}
+
+.resize-handle-nw { cursor: nwse-resize !important; }
+.resize-handle-ne { cursor: nesw-resize !important; }
+.resize-handle-sw { cursor: nesw-resize !important; }
+.resize-handle-se { cursor: nwse-resize !important; }
+
+.resizing, .rotating, .dragging-image {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  pointer-events: none !important;
+}
+
+.resizing .resize-handle,
+.rotating .rotate-handle,
+.dragging-image .resize-handle,
+.dragging-image .rotate-handle {
+  pointer-events: auto !important;
+}
+
+.map-container.edit-mode {
+  position: relative;
+}
+
+.map-container.edit-mode .leaflet-control-container {
+  pointer-events: auto;
+}
+
+.leaflet-overlay-pane {
+  position: relative;
+  z-index: 200;
+}
+
+.leaflet-overlay-pane svg {
+  pointer-events: auto;
+}
+
+.leaflet-image-layer .resize-handle-nw { top: -6px !important; left: -6px !important; }
+.leaflet-image-layer .resize-handle-ne { top: -6px !important; right: -6px !important; }
+.leaflet-image-layer .resize-handle-sw { bottom: -6px !important; left: -6px !important; }
+.leaflet-image-layer .resize-handle-se { bottom: -6px !important; right: -6px !important; }
+.leaflet-image-layer .rotate-handle { top: -25px !important; left: -8px !important; }
+
+@media (max-width: 768px) {
+  .resize-handle {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .rotate-handle {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  .leaflet-image-layer .resize-handle-nw { top: -8px !important; left: -8px !important; }
+  .leaflet-image-layer .resize-handle-ne { top: -8px !important; right: -8px !important; }
+  .leaflet-image-layer .resize-handle-sw { bottom: -8px !important; left: -8px !important; }
+  .leaflet-image-layer .resize-handle-se { bottom: -8px !important; right: -8px !important; }
+  .leaflet-image-layer .rotate-handle { top: -28px !important; left: -10px !important; }
+}
+
+.leaflet-control {
+  pointer-events: auto !important;
+  z-index: 1000 !important;
+}
+
+.leaflet-image-layer[style*="clip-path"] {
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+.map-container.dragging-image .leaflet-image-layer {
+  will-change: transform;
+  transform-style: preserve-3d;
+}
+
+/* Enhanced CSS for smooth image operations and boundary clipping */
+
+/* Smooth image transitions */
+.leaflet-image-layer {
+  transition: 
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    clip-path 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    -webkit-clip-path 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border 0.2s ease,
+    box-shadow 0.2s ease;
+  border-radius: 4px;
+  pointer-events: auto !important;
+  position: relative;
+  /* Optimize rendering for smooth transforms */
+  will-change: transform, opacity, clip-path;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+/* Smooth edit mode transitions */
+.map-container.edit-mode .leaflet-image-layer {
+  cursor: move;
+  pointer-events: auto !important;
+  transition: 
+    border 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.map-container:not(.edit-mode) .leaflet-image-layer {
+  cursor: default;
+  pointer-events: none !important;
+  /* Ensure smooth clipping transitions */
+  transition: 
+    clip-path 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    -webkit-clip-path 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Image element optimization */
+.leaflet-image-layer > img {
+  pointer-events: none !important;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  /* Smooth image loading */
+  transition: opacity 0.3s ease;
+  /* Optimize rendering */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Enhanced resize handles with smoother interactions */
+.resize-handle {
+  position: absolute !important;
+  width: 12px !important;
+  height: 12px !important;
+  background-color: #FF0000 !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 50% !important;
+  z-index: 1001 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  /* Smoother hover transitions */
+  transition: 
+    transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.15s ease,
+    box-shadow 0.15s ease !important;
+  pointer-events: auto !important;
+  user-select: none !important;
+  /* Optimize rendering */
+  will-change: transform, background-color;
+  transform: translateZ(0);
+}
+
+.resize-handle:hover {
+  transform: scale(1.2) translateZ(0) !important;
+  background-color: #FF3333 !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+.resize-handle:active {
+  transform: scale(1.1) translateZ(0) !important;
+  background-color: #CC0000 !important;
+  transition: none !important; /* Immediate response during drag */
+}
+
+/* Enhanced rotation handle */
+.rotate-handle {
+  position: absolute !important;
+  width: 16px !important;
+  height: 16px !important;
+  background-color: #00AA00 !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 50% !important;
+  z-index: 1002 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  pointer-events: auto !important;
+  user-select: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 10px !important;
+  color: white !important;
+  font-weight: bold !important;
+  cursor: grab !important;
+  /* Smooth rotation handle transitions */
+  transition: 
+    transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.15s ease,
+    box-shadow 0.15s ease !important;
+  will-change: transform, background-color;
+  transform: translateZ(0);
+}
+
+.rotate-handle:hover {
+  transform: scale(1.1) translateZ(0) !important;
+  background-color: #00CC00 !important;
+  cursor: grabbing !important;
+}
+
+.rotate-handle:active {
+  cursor: grabbing !important;
+  transform: scale(1.05) translateZ(0) !important;
+  transition: none !important; /* Immediate response during rotation */
+}
+
+/* Smooth operation states */
+.resizing, .rotating, .dragging-image {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Ensure handles remain interactive during operations */
+.resizing .resize-handle,
+.rotating .rotate-handle,
+.dragging-image .resize-handle,
+.dragging-image .rotate-handle {
+  pointer-events: auto !important;
+  transition: none !important; /* Immediate response during operations */
+}
+
+/* Optimize map container for smooth interactions */
+.map-container {
+  /* Hardware acceleration for smooth transforms */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.map-container.edit-mode {
+  position: relative;
+}
+
+/* Loading state styles */
+.leaflet-image-layer.loading {
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+}
+
+.leaflet-image-layer.loaded {
+  opacity: 1;
+}
+
+/* Clipping optimization */
+.leaflet-image-layer[style*="clip-path"] {
+  /* Ensure smooth clipping rendering */
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  /* Use GPU acceleration for clipping */
+  will-change: clip-path;
+}
+
+/* Smooth boundary interaction */
+.leaflet-overlay-pane {
+  position: relative;
+  z-index: 200;
+  /* Optimize rendering */
+  transform: translateZ(0);
+}
+
+.leaflet-overlay-pane svg {
+  pointer-events: auto;
+  /* Smooth SVG rendering */
+  shape-rendering: geometricPrecision;
+}
+
+/* Optimized controls */
+.leaflet-control {
+  pointer-events: auto !important;
+  z-index: 1000 !important;
+  /* Smooth control interactions */
+  transition: transform 0.2s ease;
+}
+
+/* Enhanced mobile responsiveness with smooth scaling */
+@media (max-width: 768px) {
+  .resize-handle {
+    width: 16px !important;
+    height: 16px !important;
+    /* Maintain smooth transitions on mobile */
+    transition: 
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.2s ease,
+      box-shadow 0.2s ease !important;
+  }
+  
+  .rotate-handle {
+    width: 20px !important;
+    height: 20px !important;
+    /* Maintain smooth transitions on mobile */
+    transition: 
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.2s ease,
+      box-shadow 0.2s ease !important;
+  }
+  
+  /* Slightly larger touch targets */
+  .leaflet-image-layer .resize-handle-nw { top: -8px !important; left: -8px !important; }
+  .leaflet-image-layer .resize-handle-ne { top: -8px !important; right: -8px !important; }
+  .leaflet-image-layer .resize-handle-sw { bottom: -8px !important; left: -8px !important; }
+  .leaflet-image-layer .resize-handle-se { bottom: -8px !important; right: -8px !important; }
+  .leaflet-image-layer .rotate-handle { top: -28px !important; left: -10px !important; }
+}
+
+/* Performance optimizations */
+.leaflet-image-layer,
+.resize-handle,
+.rotate-handle {
+  /* Use GPU acceleration */
+  transform: translate3d(0, 0, 0);
+}
+
+/* Prevent flickering during rapid updates */
+.leaflet-image-layer {
+  -webkit-transform-style: preserve-3d;
+  -webkit-backface-visibility: hidden;
+  -moz-backface-visibility: hidden;
+  -ms-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Smooth fade effects for image switching */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.98); }
+}
+
+.leaflet-image-layer.fade-in {
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.leaflet-image-layer.fade-out {
+  animation: fadeOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Optimize rendering during drag operations */
+.map-container.dragging-image .leaflet-image-layer {
+  will-change: transform;
+  pointer-events: auto;
+  /* Disable transitions during drag for immediate response */
+  transition: none !important;
+}
+
+/* Re-enable transitions after drag */
+.map-container:not(.dragging-image) .leaflet-image-layer {
+  transition: 
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    clip-path 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    -webkit-clip-path 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Boundary polygon smooth interactions */
+.leaflet-interactive {
+  transition: opacity 0.2s ease, stroke-width 0.2s ease;
+}
+
+/* Smooth modal transitions */
+.controls-modal {
+  transition: 
+    visibility 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-content {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}

@@ -47,13 +47,13 @@ interface SiteData {
 }
 
 @Component({
-  selector: 'app-page-8',
+  selector: 'app-page-10',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './page8.component.html',
-  styleUrls: ['./page8.component.css']
+  templateUrl: './page10.component.html',
+  styleUrls: ['./page10.component.css']
 })
-export class Page8Component implements OnInit, AfterViewInit {
+export class Page10Component implements OnInit, AfterViewInit {
   @ViewChild('mapContainer', { static: true }) mapContainer!: ElementRef;
   @ViewChild('originalImageInput', { static: false }) originalImageInput!: ElementRef;
   @ViewChild('annotatedImageInput', { static: false }) annotatedImageInput!: ElementRef;
@@ -132,6 +132,10 @@ export class Page8Component implements OnInit, AfterViewInit {
         this.updateImageOverlay();
       } else {
         this.createImageOverlay();
+      }
+      // --- Ensure clipping is applied after switching image type ---
+      if (!this.isEditMode && this.imageOverlay) {
+        this.applyClipping();
       }
     }
     this.lastActiveImageType = this.activeImageType;
@@ -221,6 +225,10 @@ export class Page8Component implements OnInit, AfterViewInit {
     this.imageOverlay.setUrl(url);
     this.imageOverlay.reposition(corners.topleft, corners.topright, corners.bottomleft);
     this.imageOverlay.setOpacity(config.opacity);
+    // --- Ensure clipping is applied after update ---
+    if (!this.isEditMode) {
+      this.applyClipping();
+    }
   }
 
   private createImageOverlay(): void {
@@ -239,7 +247,15 @@ export class Page8Component implements OnInit, AfterViewInit {
       { opacity: config.opacity, interactive: true, bubblingMouseEvents: false }
     ).addTo(this.map);
 
-    if (this.isEditMode) this.setupImageDrag();
+    if (this.isEditMode) {
+      // Always set interactive and attach drag handler
+      this.imageOverlay.options.interactive = true;
+      this.imageOverlay.off('mousedown');
+      this.setupImageDrag();
+    } else {
+      // --- Ensure clipping is applied after creation ---
+      this.applyClipping();
+    }
   }
 
   private calculateImageCorners(config: ImageConfig): { topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng } {
@@ -373,6 +389,8 @@ export class Page8Component implements OnInit, AfterViewInit {
       }
 
       this.loadConfigForType(this.activeImageType);
+      // --- Always validate and correct image position before creating overlay ---
+      this.validateAndCorrectImagePosition();
       this.createImageOverlay();
       this.lastActiveImageType = this.activeImageType;
 
@@ -525,15 +543,17 @@ export class Page8Component implements OnInit, AfterViewInit {
   }
 
   private onImageDragEnd(): void {
-    if (!this.isDragging) return;
-    this.isDragging = false;
-    if (this.dragMoveHandler) this.map.off('mousemove', this.dragMoveHandler);
-    if (this.dragEndHandler) {
-      this.map.off('mouseup', this.dragEndHandler);
-      this.map.off('mouseout', this.dragEndHandler);
-    }
-    this.map.dragging.enable();
-    this.map.getContainer().style.cursor = '';
+  if (!this.isDragging) return;
+  this.isDragging = false;
+  if (this.dragMoveHandler) { this.map.off('mousemove', this.dragMoveHandler); }
+  if (this.dragEndHandler) {
+    this.map.off('mouseup', this.dragEndHandler);
+    this.map.off('mouseout', this.dragEndHandler);
+  }
+  this.map.dragging.enable();
+  this.map.getContainer().style.cursor = '';
+  // Ensure image is inside boundary after drag
+  this.validateAndCorrectImagePosition();
   }
 
   private calculateInitialImageDimensions(aspectRatio: number): { width: number, height: number } {
@@ -544,8 +564,14 @@ export class Page8Component implements OnInit, AfterViewInit {
     };
   }
 
-  public onScaleChange(): void { this.updateImageTransform(); }
-  public onRotationChange(): void { this.updateImageTransform(); }
+  public onScaleChange(): void {
+    this.updateImageTransform();
+    this.validateAndCorrectImagePosition();
+  }
+  public onRotationChange(): void {
+    this.updateImageTransform();
+    this.validateAndCorrectImagePosition();
+  }
   public toggleControlsModal(): void { this.showControlsModal = !this.showControlsModal; }
   public closeControlsModal(): void { this.showControlsModal = false; }
 
@@ -553,9 +579,11 @@ export class Page8Component implements OnInit, AfterViewInit {
     this.isEditMode = true;
     this.setupDrawControls();
     if (this.imageOverlay) {
+      // Always set interactive and re-attach drag handler
       this.imageOverlay.options.interactive = true;
       this.removeClipping();
       this.map.off('move', this.applyClipping, this);
+      this.imageOverlay.off('mousedown');
       this.setupImageDrag();
     }
     if (this.boundaryPolygonLayer) {

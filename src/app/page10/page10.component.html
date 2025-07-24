@@ -1,4 +1,4 @@
-<div #mapContainer class="map-container" [class.edit-mode]="isEditMode"></div>
+<div #mapContainer class="map-container"></div>
 
 <input type="file" #originalImageInput hidden (change)="onImageFileSelected($event, 'original')" accept="image/*" />
 <input type="file" #annotatedImageInput hidden (change)="onImageFileSelected($event, 'annotated')" accept="image/*" />
@@ -50,48 +50,48 @@
 </div>
 
 <div class="controls-modal" [class.open]="showControlsModal">
-      <div class="modal-backdrop" (click)="closeControlsModal()"></div>
-      <div class="modal-content">
-            <div class="modal-header">
-                  <h3>Image Controls</h3>
-                  <button class="close-button" (click)="closeControlsModal()">&times;</button>
-                </div>
-            <div class="modal-body">
-                  <div class="control-group">
-                        <label>Scale (Current: {{imageScale | number:'1.2-2'}})</label>
-                        <div class="control-input">
-                              <input type="range" min="0.1" max="10" step="0.1" [(ngModel)]="imageScale"
-                                (input)="onScaleChange()" />
-                            </div>
-                      </div>
-                  <div class="control-group">
-                        <label>Rotation (Current: {{imageRotation}}°)</label>
-                        <div class="control-input">
-                              <input type="range" min="-180" max="180" step="1" [(ngModel)]="imageRotation"
-                                (input)="onRotationChange()" />
-                            </div>
-                      </div>
-                  <div class="control-group">
-                        <label>Opacity (Current: {{imageOpacity | number:'1.2-2'}})</label>
-                        <div class="control-input">
-                              <input type="range" min="0" max="1" step="0.05" [(ngModel)]="imageOpacity"
-                                (input)="onOpacityChange()" />
-                            </div>
-                      </div>
-                </div>
-            <div class="modal-footer">
+      <div class="modal-backdrop" (click)="closeControlsModal()"></div>
+      <div class="modal-content">
+            <div class="modal-header">
+                  <h3>Image Controls</h3>
+                  <button class="close-button" (click)="closeControlsModal()">&times;</button>
+                </div>
+            <div class="modal-body">
+                  <div class="control-group">
+                        <label>Scale (Current: {{imageScale | number:'1.2-2'}})</label>
+                        <div class="control-input">
+                              <input type="range" min="0.1" max="10" step="0.1" [(ngModel)]="imageScale"
+                        (input)="onScaleChange()" />
+                            </div>
+                      </div>
+                  <div class="control-group">
+                        <label>Rotation (Current: {{imageRotation}}°)</label>
+                        <div class="control-input">
+                              <input type="range" min="-180" max="180" step="1" [(ngModel)]="imageRotation"
+                        (input)="onRotationChange()" />
+                            </div>
+                      </div>
+                  <div class="control-group">
+                        <label>Opacity (Current: {{imageOpacity | number:'1.2-2'}})</label>
+                        <div class="control-input">
+                              <input type="range" min="0" max="1" step="0.05" [(ngModel)]="imageOpacity"
+                        (input)="onOpacityChange()" />
+                            </div>
+                      </div>
+                </div>
+            <div class="modal-footer">
             <button class="btn btn-primary" (click)="saveConfiguration()">
-                      Save All Configurations
-                    </button>
-              
+                        Save All Configurations
+                      </button>
+               
         </div>
-        </div>
+          </div>
 </div>
 
 <div class="floating-controls">
     <button *ngIf="!isEditMode" class="btn btn-warning" (click)="enableEditing()">
-          Edit ✏️
-        </button>
+            Edit ✏️
+          </button>
 
     <button class="btn btn-primary" (click)="handleUploadClick()" title="Manage Images"
         [disabled]="!boundaryPolygonLayer">
@@ -109,14 +109,14 @@
         </select>
     </div>
 
-      <button *ngIf="activeImageType !== 'none' && isEditMode" class="control-toggle-btn"
+      <button *ngIf="activeImageType !== 'none' && isEditMode" class="control-toggle-btn"
         (click)="toggleControlsModal()" title="Open Image Controls">
-            <span class="icon">⚙️</span>
-          </button>
+            <span class="icon">⚙️</span>
+          </button>
 
-      <button *ngIf="boundaryPolygonLayer && !isEditMode" class="control-toggle-btn" (click)="extractMapImage()"
+      <button *ngIf="boundaryPolygonLayer && !isEditMode" class="control-toggle-btn" (click)="extractMapImage()"
         [disabled]="extracting" title="Extract Map Image">
-            <span class="icon" *ngIf="!extracting">📸</span>
-            <span class="icon" *ngIf="extracting">⏳</span>
-          </button>
+            <span class="icon" *ngIf="!extracting">📸</span>
+            <span class="icon" *ngIf="extracting">⏳</span>
+          </button>
 </div>
