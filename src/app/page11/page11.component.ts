@@ -18,6 +18,23 @@ interface PolygonCoordinate {
   lng: number;
 }
 
+interface ImageDimensions {
+  width: number;
+  height: number;
+  aspectRatio: number;
+}
+
+interface PolygonBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+  center: { lat: number; lng: number };
+  width: number;
+  height: number;
+  aspectRatio: number;
+}
+
 @Component({
   selector: 'app-page11',
   standalone: true,
@@ -25,7 +42,7 @@ interface PolygonCoordinate {
   template: `
     <div class="map-container">
       <div class="map-header">
-        <h2>Polygon Drawing Tool</h2>
+        <h2>Polygon Drawing Tool with Image Overlay</h2>
         <div class="status-indicator" [class.loading]="isLoading()" [class.ready]="isMapReady()">
           {{ mapStatus() }}
         </div>
@@ -34,42 +51,105 @@ interface PolygonCoordinate {
       <div id="map" class="map" [class.loading]="isLoading()"></div>
       
       <div class="controls">
-        <button 
-          (click)="toggleDrawing(true)" 
-          class="btn btn-primary"
-          [disabled]="!isMapReady() || isDrawingEnabled()"
-          type="button">
-          <span class="icon">✏️</span>
-          Enable Drawing
-        </button>
-        
-        <button 
-          (click)="toggleDrawing(false)" 
-          class="btn btn-secondary"
-          [disabled]="!isMapReady() || !isDrawingEnabled()"
-          type="button">
-          <span class="icon">🚫</span>
-          Disable Drawing
-        </button>
-        
-        <button 
-          (click)="clearAllPolygons()" 
-          class="btn btn-danger"
-          [disabled]="!isMapReady() || polygonCount() === 0"
-          type="button">
-          <span class="icon">🗑️</span>
-          Clear All ({{ polygonCount() }})
-        </button>
-        
-        <button 
-          (click)="exportCoordinates()" 
-          class="btn btn-success"
-          [disabled]="!isMapReady() || polygonCount() === 0"
-          type="button">
-          <span class="icon">💾</span>
-          Export Coordinates
-        </button>
+        <!-- Image Upload Section -->
+        <div class="upload-section">
+          <label for="imageUpload" class="btn btn-info">
+            <span class="icon">📷</span>
+            Upload Image
+          </label>
+          <input 
+            type="file" 
+            id="imageUpload"
+            accept="image/*" 
+            (change)="onImageUpload($event)" 
+            style="display: none;" />
+          @if (uploadedImageInfo()) {
+            <div class="image-info">
+              <small>{{ uploadedImageInfo()!.width }}×{{ uploadedImageInfo()!.height }} 
+              ({{ uploadedImageInfo()!.aspectRatio.toFixed(2) }}:1)</small>
+            </div>
+          }
+        </div>
+
+        <!-- Drawing Controls -->
+        <div class="drawing-section">
+          <button 
+            (click)="setDrawingMode('polygon')" 
+            class="btn btn-primary"
+            [class.active]="drawingMode() === 'polygon'"
+            [disabled]="!isMapReady()"
+            type="button">
+            <span class="icon">⬟</span>
+            Draw Polygon
+          </button>
+          
+          <button 
+            (click)="setDrawingMode('rectangle')" 
+            class="btn btn-primary"
+            [class.active]="drawingMode() === 'rectangle'"
+            [disabled]="!isMapReady()"
+            type="button">
+            <span class="icon">⬛</span>
+            Draw Rectangle
+          </button>
+          
+          <button 
+            (click)="setDrawingMode(null)" 
+            class="btn btn-secondary"
+            [disabled]="!isMapReady()"
+            type="button">
+            <span class="icon">🚫</span>
+            Stop Drawing
+          </button>
+        </div>
+
+        <!-- Action Controls -->
+        <div class="action-section">
+          <button 
+            (click)="overlayImageOnSelected()" 
+            class="btn btn-success"
+            [disabled]="!isMapReady() || !uploadedImageInfo() || !selectedPolygon()"
+            type="button">
+            <span class="icon">🖼️</span>
+            Overlay Image
+          </button>
+          
+          <button 
+            (click)="clearAllPolygons()" 
+            class="btn btn-danger"
+            [disabled]="!isMapReady() || polygonCount() === 0"
+            type="button">
+            <span class="icon">🗑️</span>
+            Clear All ({{ polygonCount() }})
+          </button>
+          
+          <button 
+            (click)="exportCoordinates()" 
+            class="btn btn-info"
+            [disabled]="!isMapReady() || polygonCount() === 0"
+            type="button">
+            <span class="icon">💾</span>
+            Export Data
+          </button>
+        </div>
       </div>
+      
+      <!-- Info Panels -->
+      @if (selectedPolygon()) {
+        <div class="info-panel">
+          <h3>Selected Polygon Info</h3>
+          <div class="polygon-info">
+            <div>Bounds: {{ getPolygonBounds(selectedPolygon()!).width.toFixed(6) }}° × {{ getPolygonBounds(selectedPolygon()!).height.toFixed(6) }}°</div>
+            <div>Aspect Ratio: {{ getPolygonBounds(selectedPolygon()!).aspectRatio.toFixed(2) }}:1</div>
+            @if (uploadedImageInfo()) {
+              <div class="ratio-comparison" [class.warning]="!ratiosMatch()">
+                Image Ratio: {{ uploadedImageInfo()!.aspectRatio.toFixed(2) }}:1
+                <span *ngIf="!ratiosMatch()" class="ratio-warning">⚠️ Ratios don't match</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
       
       @if (lastPolygonCoordinates().length > 0) {
         <div class="coordinates-panel">
@@ -148,37 +228,41 @@ interface PolygonCoordinate {
       opacity: 0.7;
     }
 
-    .map.loading::before {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 40px;
-      height: 40px;
-      margin: -20px 0 0 -20px;
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #3498db;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      z-index: 1000;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
     .controls {
       padding: 1rem;
       background-color: #f8f9fa;
       display: flex;
-      gap: 0.75rem;
+      gap: 1rem;
       flex-wrap: wrap;
       border-top: 1px solid #dee2e6;
+      align-items: center;
+    }
+
+    .upload-section, .drawing-section, .action-section {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .upload-section {
+      border-right: 1px solid #dee2e6;
+      padding-right: 1rem;
+    }
+
+    .drawing-section {
+      border-right: 1px solid #dee2e6;
+      padding-right: 1rem;
+    }
+
+    .image-info {
+      font-size: 0.75rem;
+      color: #6c757d;
+      margin-top: 0.25rem;
     }
 
     .btn {
-      padding: 0.75rem 1.5rem;
+      padding: 0.5rem 1rem;
       border: none;
       border-radius: 6px;
       cursor: pointer;
@@ -196,15 +280,15 @@ interface PolygonCoordinate {
       box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     }
 
-    .btn:active:not(:disabled) {
-      transform: translateY(0);
-    }
-
     .btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
       transform: none;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .btn.active {
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+      transform: translateY(1px);
     }
 
     .btn-primary {
@@ -227,8 +311,39 @@ interface PolygonCoordinate {
       color: white;
     }
 
-    .icon {
+    .btn-info {
+      background: linear-gradient(135deg, #17a2b8, #117a8b);
+      color: white;
+    }
+
+    .info-panel {
+      padding: 1rem;
+      background-color: #e3f2fd;
+      border-top: 1px solid #bbdefb;
+    }
+
+    .info-panel h3 {
+      margin: 0 0 0.5rem 0;
+      color: #1976d2;
       font-size: 1rem;
+    }
+
+    .polygon-info {
+      font-size: 0.875rem;
+      color: #424242;
+    }
+
+    .polygon-info > div {
+      margin-bottom: 0.25rem;
+    }
+
+    .ratio-comparison.warning {
+      color: #f57c00;
+    }
+
+    .ratio-warning {
+      margin-left: 0.5rem;
+      font-weight: bold;
     }
 
     .coordinates-panel {
@@ -281,10 +396,6 @@ interface PolygonCoordinate {
       position: relative;
     }
 
-    .error-icon {
-      font-size: 1.2rem;
-    }
-
     .error-close {
       position: absolute;
       right: 1rem;
@@ -293,26 +404,19 @@ interface PolygonCoordinate {
       color: #721c24;
       cursor: pointer;
       font-size: 1.2rem;
-      font-weight: bold;
-    }
-
-    .error-close:hover {
-      color: #491217;
     }
 
     @media (max-width: 768px) {
-      .map-header {
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
       .controls {
-        justify-content: center;
+        flex-direction: column;
+        align-items: stretch;
       }
 
-      .btn {
-        flex: 1;
-        min-width: 140px;
+      .upload-section, .drawing-section, .action-section {
+        border-right: none;
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 1rem;
+        justify-content: center;
       }
     }
   `]
@@ -323,19 +427,34 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   private drawingManager: google.maps.drawing.DrawingManager | null = null;
   private overlayCompleteListener: google.maps.MapsEventListener | null = null;
   private polygons: google.maps.Polygon[] = [];
+  private groundOverlays: google.maps.GroundOverlay[] = [];
 
   // Reactive state using signals
   protected readonly isLoading = signal(true);
   protected readonly isMapReady = signal(false);
-  protected readonly isDrawingEnabled = signal(false);
+  protected readonly drawingMode = signal<string | null>(null);
   protected readonly polygonCount = signal(0);
+  protected readonly selectedPolygon = signal<google.maps.Polygon | null>(null);
   protected readonly lastPolygonCoordinates = signal<PolygonCoordinate[]>([]);
   protected readonly errorMessage = signal<string | null>(null);
+  protected readonly uploadedImageInfo = signal<ImageDimensions | null>(null);
+
+  private uploadedImageUrl: string | null = null;
 
   protected readonly mapStatus = computed(() => {
     if (this.isLoading()) return 'Loading...';
     if (this.isMapReady()) return 'Ready';
     return 'Initializing...';
+  });
+
+  protected readonly ratiosMatch = computed(() => {
+    const imageInfo = this.uploadedImageInfo();
+    const polygon = this.selectedPolygon();
+    if (!imageInfo || !polygon) return true;
+    
+    const polygonBounds = this.getPolygonBounds(polygon);
+    const ratioDiff = Math.abs(imageInfo.aspectRatio - polygonBounds.aspectRatio);
+    return ratioDiff < 0.1; // Allow 10% tolerance
   });
 
   ngAfterViewInit(): void {
@@ -377,42 +496,38 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       center: { lat: -34.397, lng: 150.644 },
       zoom: 8,
       mapTypeId: google.maps.MapTypeId.ROADMAP,
-      styles: [
-        {
-          featureType: 'water',
-          elementType: 'geometry.fill',
-          stylers: [{ color: '#d3d3d3' }]
-        },
-        {
-          featureType: 'transit',
-          stylers: [{ color: '#808080' }, { visibility: 'off' }]
-        }
-      ]
     });
   }
 
   private setupDrawingManager(): void {
-    if (!this.map) return;
+  if (!this.map) return;
 
-    this.drawingManager = new google.maps.drawing.DrawingManager({
-      drawingMode: null, // Start with drawing disabled
-      drawingControl: false, // We'll use our custom controls
-      polygonOptions: {
-        fillColor: '#3367d6',
-        fillOpacity: 0.3,
-        strokeColor: '#3367d6',
-        strokeWeight: 2,
-        clickable: true,
-        editable: true,
-        zIndex: 1,
-      },
-    });
-
-    if (this.drawingManager && this.map) {
-      this.drawingManager.setMap(this.map);
+  const drawingManager = new google.maps.drawing.DrawingManager({
+    drawingMode: null,
+    drawingControl: false,
+    polygonOptions: {
+      fillColor: '#3367d6',
+      fillOpacity: 0.3,
+      strokeColor: '#3367d6',
+      strokeWeight: 2,
+      clickable: true,
+      editable: true,
+      zIndex: 1,
+    },
+    rectangleOptions: {
+      fillColor: '#ff6b35',
+      fillOpacity: 0.3,
+      strokeColor: '#ff6b35',
+      strokeWeight: 2,
+      clickable: true,
+      editable: true,
+      zIndex: 1,
     }
-  }
+  });
 
+  drawingManager.setMap(this.map);
+  this.drawingManager = drawingManager; // Assign after successful creation
+}
   private setupEventListeners(): void {
     if (!this.drawingManager) return;
 
@@ -428,24 +543,83 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   }
 
   private handleOverlayComplete(event: google.maps.drawing.OverlayCompleteEvent): void {
+    const shape = event.overlay;
+    let coordinates: PolygonCoordinate[] = [];
+
     if (event.type === google.maps.drawing.OverlayType.POLYGON) {
-      const polygon = event.overlay as google.maps.Polygon;
+      const polygon = shape as google.maps.Polygon;
+      coordinates = this.getPolygonCoordinates(polygon);
       this.polygons.push(polygon);
+      this.setupPolygonListeners(polygon);
+    } else if (event.type === google.maps.drawing.OverlayType.RECTANGLE) {
+      const rectangle = shape as google.maps.Rectangle;
+      const bounds = rectangle.getBounds()!;
+      const polygon = this.rectangleToPolygon(rectangle);
+      coordinates = this.getPolygonCoordinates(polygon);
+      this.polygons.push(polygon);
+      this.setupPolygonListeners(polygon);
       
-      const coordinates = this.getPolygonCoordinates(polygon);
-      this.lastPolygonCoordinates.set(coordinates);
-      this.polygonCount.set(this.polygons.length);
-
-      // Automatically disable drawing after completing a polygon
-      this.toggleDrawing(false);
-
-      // Add click listener to polygon for deletion
-      google.maps.event.addListener(polygon, 'click', () => {
-        this.removePolygon(polygon);
-      });
-
-      console.log('New polygon created with coordinates:', coordinates);
+      // Remove the rectangle since we converted it to polygon
+      rectangle.setMap(null);
     }
+
+    this.lastPolygonCoordinates.set(coordinates);
+    this.polygonCount.set(this.polygons.length);
+    this.setDrawingMode(null);
+  }
+
+  private rectangleToPolygon(rectangle: google.maps.Rectangle): google.maps.Polygon {
+    const bounds = rectangle.getBounds()!;
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    
+    const polygonCoords = [
+      { lat: ne.lat(), lng: sw.lng() }, // NW
+      { lat: ne.lat(), lng: ne.lng() }, // NE  
+      { lat: sw.lat(), lng: ne.lng() }, // SE
+      { lat: sw.lat(), lng: sw.lng() }, // SW
+    ];
+
+    const polygon = new google.maps.Polygon({
+      paths: polygonCoords,
+      fillColor: '#ff6b35',
+      fillOpacity: 0.3,
+      strokeColor: '#ff6b35',
+      strokeWeight: 2,
+      clickable: true,
+      editable: true,
+      zIndex: 1,
+    });
+
+    polygon.setMap(this.map);
+    return polygon;
+  }
+
+  private setupPolygonListeners(polygon: google.maps.Polygon): void {
+    google.maps.event.addListener(polygon, 'click', () => {
+      this.selectedPolygon.set(polygon);
+      this.highlightPolygon(polygon);
+    });
+
+    google.maps.event.addListener(polygon, 'rightclick', () => {
+      this.removePolygon(polygon);
+    });
+  }
+
+  private highlightPolygon(selectedPolygon: google.maps.Polygon): void {
+    // Reset all polygons to normal style
+    this.polygons.forEach(polygon => {
+      polygon.setOptions({
+        strokeWeight: 2,
+        strokeOpacity: 1
+      });
+    });
+
+    // Highlight selected polygon
+    selectedPolygon.setOptions({
+      strokeWeight: 4,
+      strokeOpacity: 1
+    });
   }
 
   private getPolygonCoordinates(polygon: google.maps.Polygon): PolygonCoordinate[] {
@@ -456,12 +630,43 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     }));
   }
 
+  protected getPolygonBounds(polygon: google.maps.Polygon): PolygonBounds {
+    const path = polygon.getPath();
+    const bounds = new google.maps.LatLngBounds();
+    
+    path.forEach(latLng => {
+      bounds.extend(latLng);
+    });
+
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    const center = bounds.getCenter();
+    
+    const width = ne.lng() - sw.lng();
+    const height = ne.lat() - sw.lat();
+    
+    return {
+      north: ne.lat(),
+      south: sw.lat(),
+      east: ne.lng(),
+      west: sw.lng(),
+      center: { lat: center.lat(), lng: center.lng() },
+      width,
+      height,
+      aspectRatio: width / height
+    };
+  }
+
   private removePolygon(polygon: google.maps.Polygon): void {
     const index = this.polygons.indexOf(polygon);
     if (index > -1) {
       polygon.setMap(null);
       this.polygons.splice(index, 1);
       this.polygonCount.set(this.polygons.length);
+      
+      if (this.selectedPolygon() === polygon) {
+        this.selectedPolygon.set(null);
+      }
       
       if (this.polygons.length === 0) {
         this.lastPolygonCoordinates.set([]);
@@ -478,17 +683,78 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       google.maps.event.clearInstanceListeners(polygon);
     });
 
+    this.groundOverlays.forEach(overlay => {
+      overlay.setMap(null);
+    });
+
     this.polygons = [];
+    this.groundOverlays = [];
   }
 
   // Public methods for template
-  protected toggleDrawing(enable: boolean): void {
+  protected setDrawingMode(mode: string | null): void {
     if (!this.drawingManager) return;
 
-    this.drawingManager.setDrawingMode(
-      enable ? google.maps.drawing.OverlayType.POLYGON : null
+    let drawingMode = null;
+    if (mode === 'polygon') {
+      drawingMode = google.maps.drawing.OverlayType.POLYGON;
+    } else if (mode === 'rectangle') {
+      drawingMode = google.maps.drawing.OverlayType.RECTANGLE;
+    }
+
+    this.drawingManager.setDrawingMode(drawingMode);
+    this.drawingMode.set(mode);
+  }
+
+  protected overlayImageOnSelected(): void {
+    const polygon = this.selectedPolygon();
+    const imageInfo = this.uploadedImageInfo();
+    
+    if (!polygon || !this.uploadedImageUrl || !imageInfo) return;
+
+    const bounds = this.getPolygonBounds(polygon);
+    
+    // Calculate the overlay bounds to match polygon bounds
+    let overlayBounds;
+    
+    if (imageInfo.aspectRatio > bounds.aspectRatio) {
+      // Image is wider than polygon, fit to polygon width
+      const imageHeight = bounds.width / imageInfo.aspectRatio;
+      const centerLat = bounds.center.lat;
+      overlayBounds = new google.maps.LatLngBounds(
+        new google.maps.LatLng(centerLat - imageHeight/2, bounds.west),
+        new google.maps.LatLng(centerLat + imageHeight/2, bounds.east)
+      );
+    } else {
+      // Image is taller than polygon, fit to polygon height
+      const imageWidth = bounds.height * imageInfo.aspectRatio;
+      const centerLng = bounds.center.lng;
+      overlayBounds = new google.maps.LatLngBounds(
+        new google.maps.LatLng(bounds.south, centerLng - imageWidth/2),
+        new google.maps.LatLng(bounds.north, centerLng + imageWidth/2)
+      );
+    }
+
+    const groundOverlay = new google.maps.GroundOverlay(
+      this.uploadedImageUrl,
+      overlayBounds,
+      {
+        opacity: 0.8,
+        clickable: false
+      }
     );
-    this.isDrawingEnabled.set(enable);
+
+    groundOverlay.setMap(this.map);
+    this.groundOverlays.push(groundOverlay);
+
+    // Add right-click to remove overlay
+    google.maps.event.addListener(groundOverlay, 'rightclick', () => {
+      const index = this.groundOverlays.indexOf(groundOverlay);
+      if (index > -1) {
+        groundOverlay.setMap(null);
+        this.groundOverlays.splice(index, 1);
+      }
+    });
   }
 
   protected clearAllPolygons(): void {
@@ -497,28 +763,46 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       google.maps.event.clearInstanceListeners(polygon);
     });
     
+    this.groundOverlays.forEach(overlay => {
+      overlay.setMap(null);
+    });
+    
     this.polygons = [];
+    this.groundOverlays = [];
     this.polygonCount.set(0);
+    this.selectedPolygon.set(null);
     this.lastPolygonCoordinates.set([]);
-    this.isDrawingEnabled.set(false);
-    this.drawingManager?.setDrawingMode(null);
+    this.setDrawingMode(null);
   }
 
   protected exportCoordinates(): void {
     if (this.polygons.length === 0) return;
 
-    const allCoordinates = this.polygons.map((polygon, index) => ({
-      polygonId: index + 1,
-      coordinates: this.getPolygonCoordinates(polygon)
-    }));
+    const exportData = {
+      polygons: this.polygons.map((polygon, index) => ({
+        id: index + 1,
+        coordinates: this.getPolygonCoordinates(polygon),
+        bounds: this.getPolygonBounds(polygon)
+      })),
+      groundOverlays: this.groundOverlays.map((overlay, index) => ({
+        id: index + 1,
+        bounds: {
+          north: overlay.getBounds()?.getNorthEast().lat(),
+          south: overlay.getBounds()?.getSouthWest().lat(),
+          east: overlay.getBounds()?.getNorthEast().lng(),
+          west: overlay.getBounds()?.getSouthWest().lng()
+        }
+      })),
+      imageInfo: this.uploadedImageInfo()
+    };
 
-    const dataStr = JSON.stringify(allCoordinates, null, 2);
+    const dataStr = JSON.stringify(exportData, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `polygon-coordinates-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `polygon-image-data-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -528,6 +812,28 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   protected clearError(): void {
     this.errorMessage.set(null);
   }
-}
 
-// services/map-loader.service.ts
+  onImageUpload(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || !input.files[0]) return;
+
+    const file = input.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = (e: any) => {
+      const img = new Image();
+      img.onload = () => {
+        const aspectRatio = img.width / img.height;
+        this.uploadedImageInfo.set({
+          width: img.width,
+          height: img.height,
+          aspectRatio: aspectRatio
+        });
+        this.uploadedImageUrl = e.target.result;
+      };
+      img.src = e.target.result;
+    };
+    
+    reader.readAsDataURL(file);
+  }
+}
