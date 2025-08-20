@@ -10,6 +10,7 @@ import { Page7Component } from './page7/page7.component';
 import { Page8Component } from './page8/page8.component';
 import { Page9Component } from './page9/page9.component';
 import { Page10Component } from './page10/page10.component';
+import { Page11Component } from './page11/page11.component';
 
 export const routes: Routes = [
     { path: 'page1', component: Page1Component },
@@ -23,5 +24,6 @@ export const routes: Routes = [
     { path: 'page8',component: Page8Component },
     { path: 'page9',component: Page9Component },
     { path: 'page10',component: Page10Component },
+    { path: 'page11',component: Page11Component },
     { path: '', redirectTo: 'page1', pathMatch: 'full' }
 ];

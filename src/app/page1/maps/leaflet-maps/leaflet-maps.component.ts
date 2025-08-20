@@ -77,7 +77,9 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
     this.map = L.map(this.mapContainer.nativeElement, {
       zoomControl: false,
       preferCanvas: true ,
-      attributionControl: false// Better performance for animations
+      attributionControl: false,
+      maxZoom: 20,
+      minZoom: 2// Better performance for animations
     }).setView([this.lat, this.lon], 4);
 
     // Add zoom control to the bottom right
@@ -85,8 +87,12 @@ export class LeafletMapsComponent implements OnInit, AfterViewInit, OnChanges {
 
     // Use only OpenStreetMap as the base layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 20,
+        maxNativeZoom: 19,
+        minZoom: 2
     }).addTo(this.map);
 
+     
     // Initialize drawing
     this.initializeDrawing();
 

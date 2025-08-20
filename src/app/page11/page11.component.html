@@ -1,0 +1,50 @@
+<div class="map-container">
+  <google-map 
+    height="100%" 
+    width="100%" 
+    [zoom]="zoom" 
+    [center]="center"
+    [options]="mapOptions"
+    (mapInitialized)="onMapInitialized($event)">
+  </google-map>
+
+  <div class="drawing-controls">
+    <h3>Drawing Tools</h3>
+
+    <div class="current-mode">
+      <strong>Mode:</strong> {{ currentMode }}
+    </div>
+    <div class="instructions">
+      {{ instructions }}
+    </div>
+
+    <div class="mode-buttons">
+      <button 
+        class="control-btn" 
+        [class.active]="currentMode === 'polygon'" 
+        (click)="setMode('polygon')">
+        Polygon
+      </button>
+      <button 
+        class="control-btn" 
+        [class.active]="currentMode === 'rectangle'" 
+        (click)="setMode('rectangle')">
+        Rectangle
+      </button>
+    </div>
+
+    <div class="action-buttons">
+      <button 
+        class="control-btn"
+        [class.active]="currentMode === 'select'"
+        (click)="setMode('select')">
+        Select/Edit
+      </button>
+      <button 
+        class="control-btn danger" 
+        (click)="clearFeatures()">
+        Clear All
+      </button>
+    </div>
+  </div>
+</div>

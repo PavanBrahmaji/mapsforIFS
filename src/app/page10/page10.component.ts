@@ -269,38 +269,42 @@ export class Page10Component implements OnInit, AfterViewInit {
   }
 
   private createImageOverlay(): void {
-    if (this.activeImageType === 'none' || !this.siteData.imageConfigs?.[this.activeImageType]) return;
-    const config = this.siteData.imageConfigs[this.activeImageType]!;
-    const imageUrl = `${this.serverUrl}/images/${config.fileName}`;
+  if (this.activeImageType === 'none' || !this.siteData.imageConfigs?.[this.activeImageType]) return;
+  
+  const config = this.siteData.imageConfigs[this.activeImageType]!;
+  const imageUrl = `${this.serverUrl}/images/${config.fileName}`;
 
-    if (this.imageOverlay) this.imageOverlay.remove();
+  if (this.imageOverlay) this.imageOverlay.remove();
 
-    this.imageCenter = L.latLng(config.center.lat, config.center.lng);
-    const corners = this.calculateImageCorners(config);
+  this.imageCenter = L.latLng(config.center.lat, config.center.lng);
+  const corners = this.calculateImageCorners(config);
 
-    this.imageOverlay = L.imageOverlay.rotated(
-      imageUrl,
-      corners.topleft, corners.topright, corners.bottomleft,
-      {
-        opacity: config.opacity,
-        interactive: this.isEditMode,
-        bubblingMouseEvents: false,
-        // Add custom class for styling
-        className: this.isEditMode ? 'leaflet-image-edit-mode' : ''
-      }
-    ).addTo(this.map);
+  this.imageOverlay = L.imageOverlay.rotated(
+    imageUrl,
+    corners.topleft, corners.topright, corners.bottomleft,
+    {
+      opacity: config.opacity,
+      interactive: this.isEditMode,
+      bubblingMouseEvents: false,
+      className: this.isEditMode ? 'leaflet-image-edit-mode' : ''
+    }
+  ).addTo(this.map);
 
-    if (this.isEditMode) {
-      // Set interactive and attach drag handler
-      this.imageOverlay.options.interactive = true;
+  if (this.isEditMode) {
+    // Ensure the overlay is interactive and properly set up for dragging
+    this.imageOverlay.options.interactive = true;
+    
+    // Add a small delay to ensure the overlay is fully rendered
+    setTimeout(() => {
       this.setupImageDrag();
       this.addResizeHandles();
       this.updateImageBorder();
-    } else {
-      // Ensure clipping is applied after creation
-      this.applyClipping();
-    }
+    }, 100);
+  } else {
+    // Ensure clipping is applied after creation
+    this.applyClipping();
   }
+}
 
   private calculateImageCorners(config: ImageConfig): { topleft: L.LatLng, topright: L.LatLng, bottomleft: L.LatLng } {
     const center = L.latLng(config.center.lat, config.center.lng);
@@ -326,18 +330,29 @@ export class Page10Component implements OnInit, AfterViewInit {
   }
 
   public updateImageTransform(): void {
-    if (this.activeImageType === 'none' || !this.imageOverlay || !this.siteData.imageConfigs?.[this.activeImageType]) return;
+  if (this.activeImageType === 'none' || !this.imageOverlay || !this.siteData.imageConfigs?.[this.activeImageType]) return;
 
+  try {
     const config = this.siteData.imageConfigs[this.activeImageType]!;
     config.scale = this.imageScale;
     config.rotation = this.imageRotation;
+    
     if (this.imageCenter) {
       config.center = { lat: this.imageCenter.lat, lng: this.imageCenter.lng };
     }
 
     const corners = this.calculateImageCorners(config);
     this.imageOverlay.reposition(corners.topleft, corners.topright, corners.bottomleft);
+
+    // Always update border and handles after any transform
+    this.updateImageBorder();
+    if ((this as any)._resizeHandlesUpdate) {
+      (this as any)._resizeHandlesUpdate();
+    }
+  } catch (error) {
+    console.error('Error updating image transform:', error);
   }
+}
 
   public onOpacityChange(): void {
     if (this.imageOverlay) this.imageOverlay.setOpacity(this.imageOpacity);
@@ -369,14 +384,13 @@ export class Page10Component implements OnInit, AfterViewInit {
     ) {
       return;
     }
-    const bounds = this.boundaryPolygonLayer.getBounds();
-    const center = bounds.getCenter();
-    // Check if current position is valid
+    // Only correct if actually out of bounds
     if (!this.isImageCenterWithinBounds(this.imageCenter)) {
-      // Move image to boundary center
+      const bounds = this.boundaryPolygonLayer.getBounds();
+      const center = bounds.getCenter();
       this.imageCenter = center;
       // Update config
-      const config = this.siteData.imageConfigs[this.activeImageType]!
+      const config = this.siteData.imageConfigs[this.activeImageType]!;
       config.center = { lat: center.lat, lng: center.lng };
       // Update overlay
       this.updateImageTransform();
@@ -433,7 +447,7 @@ export class Page10Component implements OnInit, AfterViewInit {
       }
 
       this.loadConfigForType(this.activeImageType);
-      // --- Always validate and correct image position before creating overlay ---
+      // Only validate and correct if needed (prevents image jump)
       this.validateAndCorrectImagePosition();
       this.createImageOverlay();
       this.lastActiveImageType = this.activeImageType;
@@ -476,8 +490,16 @@ export class Page10Component implements OnInit, AfterViewInit {
   }
 
   private initializeMap(): void {
-    this.map = L.map(this.mapContainer.nativeElement, { attributionControl: false }).setView([this.lat, this.lon], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map,);
+    this.map = L.map(this.mapContainer.nativeElement, {
+      attributionControl: false,
+      maxZoom: 21,
+      minZoom: 2
+    }).setView([this.lat, this.lon], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 21,
+      maxNativeZoom: 19,
+      minZoom: 2
+    }).addTo(this.map);
     this.drawnItems = new L.FeatureGroup();
     this.map.addLayer(this.drawnItems);
     this.setupDrawControls();
@@ -559,69 +581,108 @@ export class Page10Component implements OnInit, AfterViewInit {
   }
 
   private setupImageDrag(): void {
-    if (!this.imageOverlay || !this.isEditMode) return;
+  if (!this.imageOverlay || !this.isEditMode) return;
 
-    this.imageOverlay.off('mousedown');
-    this.imageOverlay.on('mousedown', (e: L.LeafletMouseEvent) => {
-      // Only start drag if not clicking a handle
-      const target = e.originalEvent.target as HTMLElement;
-      if (target.classList.contains('resize-handle') ||
+  // Remove any existing event listeners
+  this.imageOverlay.off('mousedown');
+  
+  this.imageOverlay.on('mousedown', (e: L.LeafletMouseEvent) => {
+    // Only start drag if not clicking a handle
+    const target = e.originalEvent.target as HTMLElement;
+    if (target.classList.contains('resize-handle') ||
         target.classList.contains('rotation-handle') ||
         target.closest('.resize-handle') ||
         target.closest('.rotation-handle')) {
-        return;
-      }
-      if (!this.isEditMode) return;
-      e.originalEvent.preventDefault();
-      e.originalEvent.stopPropagation();
-      this.isDragging = true;
-      this.dragStartLatLng = e.latlng;
-      this.dragStartCenter = this.imageCenter ? L.latLng(this.imageCenter.lat, this.imageCenter.lng) : null;
-      // Assign handlers as MouseEvent listeners
-      this.dragMoveHandler = this.onImageDrag as (e: MouseEvent) => void;
-      this.dragEndHandler = this.onImageDragEnd as (e: MouseEvent) => void;
-      this.map.dragging.disable();
-      this.map.getContainer().style.cursor = 'move';
-      // Use document instead of map for better event handling
-      document.addEventListener('mousemove', this.dragMoveHandler!);
-      document.addEventListener('mouseup', this.dragEndHandler!);
-      document.addEventListener('mouseleave', this.dragEndHandler!);
-    });
-  }
+      return;
+    }
+    
+    if (!this.isEditMode) return;
+    
+    e.originalEvent.preventDefault();
+    e.originalEvent.stopPropagation();
+    
+    this.isDragging = true;
+    this.dragStartLatLng = e.latlng;
+    this.dragStartCenter = this.imageCenter ? L.latLng(this.imageCenter.lat, this.imageCenter.lng) : null;
+    
+    // Disable map dragging to prevent conflicts
+    this.map.dragging.disable();
+    this.map.getContainer().style.cursor = 'move';
+    
+    // Use the map container for mouse events to ensure proper coordinate conversion
+    const mapContainer = this.map.getContainer();
+    
+    // Create bound methods to maintain proper context
+    this.dragMoveHandler = (event: MouseEvent) => this.onImageDrag(event);
+    this.dragEndHandler = (event: MouseEvent) => this.onImageDragEnd(event);
+    
+    // Add event listeners to the map container and document
+    mapContainer.addEventListener('mousemove', this.dragMoveHandler);
+    document.addEventListener('mouseup', this.dragEndHandler);
+    document.addEventListener('mouseleave', this.dragEndHandler);
+  });
+}
 
   private onImageDrag = (e: MouseEvent): void => {
-    if (!this.isDragging || !this.dragStartLatLng || !this.dragStartCenter) return;
-    // Convert mouse position to map coordinates
-    const mouseLatLng = this.map.mouseEventToLatLng(e as any);
+  if (!this.isDragging || !this.dragStartLatLng || !this.dragStartCenter) return;
+  
+  try {
+    // Convert mouse position to map coordinates using the proper Leaflet method
+    const containerPoint = L.point(
+      e.clientX - this.map.getContainer().getBoundingClientRect().left,
+      e.clientY - this.map.getContainer().getBoundingClientRect().top
+    );
+    
+    const mouseLatLng = this.map.containerPointToLatLng(containerPoint);
+    
+    // Calculate the delta from the original drag start position
     const latDelta = mouseLatLng.lat - this.dragStartLatLng.lat;
     const lngDelta = mouseLatLng.lng - this.dragStartLatLng.lng;
+    
+    // Update image center based on the delta
     this.imageCenter = L.latLng(
       this.dragStartCenter.lat + latDelta,
       this.dragStartCenter.lng + lngDelta
     );
+    
+    // Update the transform and visual elements
     this.updateImageTransform();
     this.updateImageBorder();
+    
     // Update handles/connector position after image move
     if ((this as any)._resizeHandlesUpdate) {
       (this as any)._resizeHandlesUpdate();
     }
+  } catch (error) {
+    console.warn('Error during image drag:', error);
   }
+}
 
   private onImageDragEnd = (e: MouseEvent): void => {
-    if (!this.isDragging) return;
-    this.isDragging = false;
-    if (this.dragMoveHandler) {
-      document.removeEventListener('mousemove', this.dragMoveHandler);
-    }
-    if (this.dragEndHandler) {
-      document.removeEventListener('mouseup', this.dragEndHandler);
-      document.removeEventListener('mouseleave', this.dragEndHandler);
-    }
-    this.map.dragging.enable();
-    this.map.getContainer().style.cursor = '';
-    // Ensure image is inside boundary after drag
-    this.validateAndCorrectImagePosition();
+  if (!this.isDragging) return;
+  
+  this.isDragging = false;
+  
+  // Clean up event listeners
+  if (this.dragMoveHandler) {
+    this.map.getContainer().removeEventListener('mousemove', this.dragMoveHandler);
   }
+  if (this.dragEndHandler) {
+    document.removeEventListener('mouseup', this.dragEndHandler);
+    document.removeEventListener('mouseleave', this.dragEndHandler);
+  }
+  
+  // Re-enable map dragging
+  this.map.dragging.enable();
+  this.map.getContainer().style.cursor = '';
+  
+  // Ensure image is inside boundary after drag
+  this.validateAndCorrectImagePosition();
+  
+  // Clear the drag handlers
+  this.dragMoveHandler = undefined;
+  this.dragEndHandler = undefined;
+};
 
   private calculateInitialImageDimensions(aspectRatio: number): { width: number, height: number } {
     const DEFAULT_IMAGE_WIDTH_METERS = 500;
@@ -651,29 +712,36 @@ export class Page10Component implements OnInit, AfterViewInit {
   public closeControlsModal(): void { this.showControlsModal = false; }
 
   public enableEditing(): void {
-    this.isEditMode = true;
-    this.setupDrawControls();
+  this.isEditMode = true;
+  this.setupDrawControls();
 
-    if (this.imageOverlay) {
-      // Set interactive and re-attach drag handler
-      this.imageOverlay.options.interactive = true;
-      this.removeClipping();
-      this.map.off('move', this.applyClipping, this);
-      this.imageOverlay.off('mousedown');
+  if (this.imageOverlay) {
+    // Set interactive and re-attach drag handler
+    this.imageOverlay.options.interactive = true;
+    this.removeClipping();
+    this.map.off('move', this.applyClipping, this);
+
+    // Clear any existing event handlers
+    this.imageOverlay.off('mousedown');
+
+    // Do NOT call validateAndCorrectImagePosition here (prevents image jump)
+    // Setup drag with a small delay to ensure proper initialization
+    setTimeout(() => {
       this.setupImageDrag();
       this.addResizeHandles();
       this.updateImageBorder();
-    }
-
-    if (this.boundaryPolygonLayer) {
-      if (!this.drawnItems.hasLayer(this.boundaryPolygonLayer)) {
-        this.drawnItems.addLayer(this.boundaryPolygonLayer);
-      }
-      this.setupBoundaryInteraction(this.boundaryPolygonLayer);
-    }
-
-    this.cdr.detectChanges();
+    }, 100);
   }
+
+  if (this.boundaryPolygonLayer) {
+    if (!this.drawnItems.hasLayer(this.boundaryPolygonLayer)) {
+      this.drawnItems.addLayer(this.boundaryPolygonLayer);
+    }
+    this.setupBoundaryInteraction(this.boundaryPolygonLayer);
+  }
+
+  this.cdr.detectChanges();
+}
 
   private disableEditing(): void {
     if (this.drawControl) {
@@ -713,6 +781,18 @@ export class Page10Component implements OnInit, AfterViewInit {
     });
     return `polygon(${pixelPoints.join(', ')})`;
   }
+
+  public debugImageDrag(): void {
+  console.log('Image drag debug info:', {
+    isEditMode: this.isEditMode,
+    hasImageOverlay: !!this.imageOverlay,
+    isDragging: this.isDragging,
+    imageCenter: this.imageCenter,
+    dragStartCenter: this.dragStartCenter,
+    dragStartLatLng: this.dragStartLatLng,
+    interactive: this.imageOverlay?.options.interactive
+  });
+}
 
   private applyClipping(): void {
     if (!this.imageOverlay) return;
@@ -1219,10 +1299,12 @@ export class Page10Component implements OnInit, AfterViewInit {
     if (!imageElement) return;
     if (this.isEditMode) {
       imageElement.style.border = '3px solid #dc3545';
-      imageElement.style.boxShadow = '0 0 10px rgba(220, 53, 69, 0.5)';
+      imageElement.style.boxShadow = '0 0 10px rgba(226, 193, 196, 0.5)';
+      imageElement.style.pointerEvents = '';
     } else {
       imageElement.style.border = 'none';
       imageElement.style.boxShadow = 'none';
+      imageElement.style.pointerEvents = 'none';
     }
   }
 
