@@ -37,7 +37,7 @@ interface PolygonBounds {
 
 interface ImageOverlayData {
   id: string;
-  groundOverlay: google.maps.GroundOverlay;
+  groundOverlay: any;
   bounds: google.maps.LatLngBounds;
   rotation: number;
   controlPoints: google.maps.Marker[];
@@ -45,6 +45,10 @@ interface ImageOverlayData {
   centerMarker: google.maps.Marker;
   originalImageUrl: string;
   isSelected: boolean;
+  clippingPolygon: google.maps.Polygon;
+  domElement?: HTMLElement;
+  recreateTimeout?: any;
+  opacity?: number;
 }
 
 @Component({
@@ -54,482 +58,169 @@ interface ImageOverlayData {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="map-container">
-      <div class="map-header">
-        <h2>Advanced Polygon & Image Tool</h2>
-        <div class="status-indicator" [class.loading]="isLoading()" [class.ready]="isMapReady()">
-          {{ mapStatus() }}
-        </div>
+      <div *ngIf="isLoading()" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>{{ mapStatus() }}</p>
       </div>
-      
-      <div id="map" class="map" [class.loading]="isLoading()"></div>
-      
-      <div class="controls">
-        <div class="upload-section">
-          <label for="imageUpload" class="btn btn-info">
-            <span class="icon">📷</span>
-            Upload Image
-          </label>
+
+      <div *ngIf="errorMessage()" class="error-banner">
+        <p>{{ errorMessage() }}</p>
+        <button (click)="clearError()" class="close-btn">&times;</button>
+      </div>
+
+      <div id="map" class="map-element"></div>
+
+      <div class="control-panel">
+        <div class="control-group">
+          <h3>Drawing Tools</h3>
+          <div class="button-row">
+            <button 
+              type="button" 
+              (click)="setDrawingMode('polygon')"
+              [class.active]="drawingMode() === 'polygon'">
+              Polygon
+            </button>
+            <button 
+              type="button" 
+              (click)="setDrawingMode('rectangle')"
+              [class.active]="drawingMode() === 'rectangle'">
+              Rectangle
+            </button>
+            <button 
+              type="button" 
+              (click)="setDrawingMode(null)"
+              [class.active]="drawingMode() === null">
+              Select
+            </button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <h3>Image Upload</h3>
           <input 
             type="file" 
-            id="imageUpload"
             accept="image/*" 
-            (change)="onImageUpload($event)" 
-            style="display: none;" />
-          @if (uploadedImageInfo()) {
-            <div class="image-info">
-              <small>{{ uploadedImageInfo()!.width }}×{{ uploadedImageInfo()!.height }} 
-              ({{ uploadedImageInfo()!.aspectRatio.toFixed(2) }}:1)</small>
+            (change)="onImageUpload($event)"
+            class="file-input"
+            #fileInput>
+          
+          <div *ngIf="uploadedImageInfo()" class="image-info">
+            <p><strong>Dimensions:</strong> {{ uploadedImageInfo()!.width }}×{{ uploadedImageInfo()!.height }}px</p>
+            <p><strong>Aspect Ratio:</strong> {{ uploadedImageInfo()!.aspectRatio.toFixed(2) }}</p>
+          </div>
+
+          <button 
+            type="button" 
+            (click)="overlayImageOnSelected()"
+            [disabled]="!selectedPolygon() || !uploadedImageInfo()"
+            class="overlay-btn">
+            Overlay on Selected Polygon
+          </button>
+
+          <div *ngIf="selectedPolygon() && uploadedImageInfo() && !ratiosMatch()" class="ratio-warning">
+            Warning: Aspect ratios don't match perfectly (may cause distortion)
+          </div>
+        </div>
+
+        <div class="control-group" *ngIf="imageOverlays.length > 0">
+          <h3>Image Controls</h3>
+          
+          <div class="edit-mode-controls">
+            <button 
+              type="button" 
+              (click)="toggleImageEditMode()"
+              [class.active]="imageEditMode()">
+              {{ imageEditMode() ? 'Exit Edit' : 'Edit Mode' }}
+            </button>
+          </div>
+
+          <div class="drag-controls" *ngIf="imageEditMode()">
+            <div class="control-subgroup">
+              <label>Drag Sensitivity:</label>
+              <select (change)="setDragSensitivity($any($event.target).value)" class="sensitivity-select">
+                <option value="low">Low (Less sensitive)</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High (More sensitive)</option>
+              </select>
             </div>
-          }
-        </div>
+            
+            <div class="control-subgroup">
+              <button 
+                type="button" 
+                (click)="toggleAspectRatioLock()"
+                [class.active]="aspectRatioLocked"
+                class="aspect-lock-btn">
+                {{ aspectRatioLocked ? 'Locked' : 'Free' }} Aspect Ratio
+              </button>
+              <small class="tip">Tip: Hold Shift while dragging corners to temporarily lock aspect ratio</small>
+            </div>
+          </div>
 
-        <div class="drawing-section">
-          <button 
-            (click)="setDrawingMode('polygon')" 
-            class="btn btn-primary"
-            [class.active]="drawingMode() === 'polygon'"
-            [disabled]="!isMapReady()"
-            type="button">
-            <span class="icon">⬟</span>
-            Draw Polygon
-          </button>
-          
-          <button 
-            (click)="setDrawingMode('rectangle')" 
-            class="btn btn-primary"
-            [class.active]="drawingMode() === 'rectangle'"
-            [disabled]="!isMapReady()"
-            type="button">
-            <span class="icon">⬛</span>
-            Draw Rectangle
-          </button>
-          
-          <button 
-            (click)="setDrawingMode(null)" 
-            class="btn btn-secondary"
-            [disabled]="!isMapReady()"
-            type="button">
-            <span class="icon">🚫</span>
-            Stop Drawing
-          </button>
-        </div>
-
-        <div class="image-section">
-          <button 
-            (click)="overlayImageOnSelected()" 
-            class="btn btn-success"
-            [disabled]="!isMapReady() || !uploadedImageInfo() || !selectedPolygon()"
-            type="button">
-            <span class="icon">🖼️</span>
-            Add Image
-          </button>
-          
-          <button 
-            (click)="toggleImageEditMode()" 
-            class="btn btn-warning"
-            [class.active]="imageEditMode()"
-            [disabled]="!isMapReady() || imageOverlays.length === 0"
-            type="button">
-            <span class="icon">✏️</span>
-            Edit Images
-          </button>
-
-          @if (selectedImageOverlay()) {
+          <div *ngIf="selectedImageOverlay()" class="selected-image-controls">
+            <h4>Selected Image</h4>
+            <p><strong>Size:</strong> {{ getImageOverlaySize(selectedImageOverlay()!) }}</p>
+            <p><strong>Rotation:</strong> {{ selectedImageOverlay()!.rotation.toFixed(1) }}°</p>
+            <p><strong>Opacity:</strong> {{ (selectedImageOverlay()!.opacity || 0.8) * 100 }}%</p>
+            
             <div class="rotation-controls">
-              <button 
-                (click)="rotateSelectedImage(-15)" 
-                class="btn btn-sm btn-secondary"
-                type="button">
-                <span class="icon">↺</span>
-                -15°
-              </button>
-              <span class="rotation-display">{{ selectedImageOverlay()!.rotation.toFixed(0) }}°</span>
-              <button 
-                (click)="rotateSelectedImage(15)" 
-                class="btn btn-sm btn-secondary"
-                type="button">
-                <span class="icon">↻</span>
-                +15°
-              </button>
+              <button type="button" (click)="rotateSelectedImage(-90)">-90°</button>
+              <button type="button" (click)="rotateSelectedImage(-45)">-45°</button>
+              <button type="button" (click)="rotateSelectedImage(45)">+45°</button>
+              <button type="button" (click)="rotateSelectedImage(90)">+90°</button>
             </div>
-          }
+
+            <div class="opacity-controls">
+              <label>Opacity:</label>
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                [value]="(selectedImageOverlay()!.opacity || 0.8) * 100"
+                (input)="setImageOpacity($any($event.target).value)"
+                class="opacity-slider">
+            </div>
+          </div>
         </div>
 
-        <div class="action-section">
-          <button 
-            (click)="clearAllPolygons()" 
-            class="btn btn-danger"
-            [disabled]="!isMapReady() || polygonCount() === 0"
-            type="button">
-            <span class="icon">🗑️</span>
-            Clear Polygons ({{ polygonCount() }})
-          </button>
+        <div class="control-group">
+          <h3>Status</h3>
+          <div class="status-grid">
+            <div class="status-item">
+              <span class="status-label">Polygons:</span>
+              <span class="status-value">{{ polygonCount() }}</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Images:</span>
+              <span class="status-value">{{ imageOverlays.length }}</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Map:</span>
+              <span class="status-value">{{ mapStatus() }}</span>
+            </div>
+          </div>
+        </div>
 
-          <button 
-            (click)="clearAllImages()" 
-            class="btn btn-danger"
-            [disabled]="!isMapReady() || imageOverlays.length === 0"
-            type="button">
-            <span class="icon">🖼️🗑️</span>
-            Clear Images ({{ imageOverlays.length }})
-          </button>
-          
-          <button 
-            (click)="exportCoordinates()" 
-            class="btn btn-info"
-            [disabled]="!isMapReady() || (polygonCount() === 0 && imageOverlays.length === 0)"
-            type="button">
-            <span class="icon">💾</span>
+        <div class="control-group">
+          <h3>Clear Actions</h3>
+          <div class="button-row">
+            <button type="button" (click)="clearAllPolygons()" class="danger-btn">
+              Clear Polygons
+            </button>
+            <button type="button" (click)="clearAllImages()" class="danger-btn">
+              Clear Images
+            </button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <button type="button" (click)="exportCoordinates()" class="export-btn">
             Export Data
           </button>
         </div>
       </div>
-      
-      @if (selectedPolygon()) {
-        <div class="info-panel">
-          <h3>Selected Polygon Info</h3>
-          <div class="polygon-info">
-            <div>Bounds: {{ getPolygonBounds(selectedPolygon()!).width.toFixed(6) }}° × {{ getPolygonBounds(selectedPolygon()!).height.toFixed(6) }}°</div>
-            <div>Aspect Ratio: {{ getPolygonBounds(selectedPolygon()!).aspectRatio.toFixed(2) }}:1</div>
-            @if (uploadedImageInfo()) {
-              <div class="ratio-comparison" [class.warning]="!ratiosMatch()">
-                Image Ratio: {{ uploadedImageInfo()!.aspectRatio.toFixed(2) }}:1
-                <span *ngIf="!ratiosMatch()" class="ratio-warning">⚠️ Ratios don't match</span>
-              </div>
-            }
-          </div>
-        </div>
-      }
-
-      @if (selectedImageOverlay()) {
-        <div class="info-panel image-info-panel">
-          <h3>Selected Image Info</h3>
-          <div class="image-overlay-info">
-            <div>Rotation: {{ selectedImageOverlay()!.rotation.toFixed(1) }}°</div>
-            <div>Size: {{ getImageOverlaySize(selectedImageOverlay()!) }}</div>
-            <div class="image-instructions">
-              <small>• Drag corners to resize • Drag rotation handle to rotate • Right-click to delete</small>
-            </div>
-          </div>
-        </div>
-      }
-      
-      @if (lastPolygonCoordinates().length > 0) {
-        <div class="coordinates-panel">
-          <h3>Latest Polygon Coordinates</h3>
-          <div class="coordinates-list">
-            @for (coord of lastPolygonCoordinates(); track $index) {
-              <div class="coordinate-item">
-                <span class="coord-label">Point {{ $index + 1 }}:</span>
-                <span class="coord-value">{{ coord.lat.toFixed(6) }}, {{ coord.lng.toFixed(6) }}</span>
-              </div>
-            }
-          </div>
-        </div>
-      }
-      
-      @if (errorMessage()) {
-        <div class="error-message">
-          <span class="error-icon">⚠️</span>
-          {{ errorMessage() }}
-          <button (click)="clearError()" class="error-close" type="button">✕</button>
-        </div>
-      }
     </div>
   `,
-  styles: [`
-    :host {
-      display: block;
-      height: 100vh;
-      width: 100vw;
-    }
-    .map-container {
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-
-    .map-header {
-      padding: 1rem;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .map-header h2 {
-      margin: 0;
-      font-weight: 300;
-    }
-
-    .status-indicator {
-      padding: 0.5rem 1rem;
-      border-radius: 20px;
-      font-size: 0.875rem;
-      font-weight: 500;
-      transition: all 0.3s ease;
-    }
-
-    .status-indicator.loading {
-      background-color: rgba(255, 193, 7, 0.2);
-      border: 1px solid #ffc107;
-      color: #856404;
-    }
-
-    .status-indicator.ready {
-      background-color: rgba(40, 167, 69, 0.2);
-      border: 1px solid #28a745;
-      color: #155724;
-    }
-
-    .map {
-      flex: 1;
-      min-height: 400px;
-      position: relative;
-      transition: opacity 0.3s ease;
-    }
-
-    .map.loading {
-      opacity: 0.7;
-    }
-
-    .controls {
-      padding: 1rem;
-      background-color: #f8f9fa;
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-      border-top: 1px solid #dee2e6;
-      align-items: center;
-    }
-
-    .upload-section, .drawing-section, .image-section, .action-section {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .upload-section, .drawing-section, .image-section {
-      border-right: 1px solid #dee2e6;
-      padding-right: 1rem;
-    }
-
-    .image-info {
-      font-size: 0.75rem;
-      color: #6c757d;
-      margin-top: 0.25rem;
-    }
-
-    .rotation-controls {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-      margin-left: 0.5rem;
-      padding: 0.25rem;
-      background-color: rgba(0,0,0,0.05);
-      border-radius: 4px;
-    }
-
-    .rotation-display {
-      font-size: 0.75rem;
-      font-weight: bold;
-      color: #495057;
-      min-width: 35px;
-      text-align: center;
-    }
-
-    .btn {
-      padding: 0.5rem 1rem;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.875rem;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      transition: all 0.2s ease;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .btn-sm {
-      padding: 0.25rem 0.5rem;
-      font-size: 0.75rem;
-    }
-
-    .btn:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-    }
-
-    .btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .btn.active {
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
-      transform: translateY(1px);
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #007bff, #0056b3);
-      color: white;
-    }
-
-    .btn-secondary {
-      background: linear-gradient(135deg, #6c757d, #545b62);
-      color: white;
-    }
-
-    .btn-danger {
-      background: linear-gradient(135deg, #dc3545, #bd2130);
-      color: white;
-    }
-
-    .btn-success {
-      background: linear-gradient(135deg, #28a745, #1e7e34);
-      color: white;
-    }
-
-    .btn-info {
-      background: linear-gradient(135deg, #17a2b8, #117a8b);
-      color: white;
-    }
-
-    .btn-warning {
-      background: linear-gradient(135deg, #ffc107, #e0a800);
-      color: #212529;
-    }
-
-    .info-panel {
-      padding: 1rem;
-      background-color: #e3f2fd;
-      border-top: 1px solid #bbdefb;
-    }
-
-    .image-info-panel {
-      background-color: #fff3e0;
-      border-top: 1px solid #ffcc02;
-    }
-
-    .info-panel h3 {
-      margin: 0 0 0.5rem 0;
-      color: #1976d2;
-      font-size: 1rem;
-    }
-
-    .image-info-panel h3 {
-      color: #f57c00;
-    }
-
-    .polygon-info, .image-overlay-info {
-      font-size: 0.875rem;
-      color: #424242;
-    }
-
-    .polygon-info > div, .image-overlay-info > div {
-      margin-bottom: 0.25rem;
-    }
-
-    .image-instructions {
-      margin-top: 0.5rem;
-      color: #666;
-    }
-
-    .ratio-comparison.warning {
-      color: #f57c00;
-    }
-
-    .ratio-warning {
-      margin-left: 0.5rem;
-      font-weight: bold;
-    }
-
-    .coordinates-panel {
-      max-height: 200px;
-      overflow-y: auto;
-      background-color: #ffffff;
-      border-top: 1px solid #dee2e6;
-      padding: 1rem;
-    }
-
-    .coordinates-panel h3 {
-      margin: 0 0 1rem 0;
-      color: #495057;
-      font-size: 1rem;
-      font-weight: 600;
-    }
-
-    .coordinates-list {
-      display: grid;
-      gap: 0.5rem;
-    }
-
-    .coordinate-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 0.5rem;
-      background-color: #f8f9fa;
-      border-radius: 4px;
-      font-family: 'Courier New', monospace;
-      font-size: 0.875rem;
-    }
-
-    .coord-label {
-      font-weight: 600;
-      color: #6c757d;
-    }
-
-    .coord-value {
-      color: #495057;
-    }
-
-    .error-message {
-      background-color: #f8d7da;
-      border: 1px solid #f5c6cb;
-      color: #721c24;
-      padding: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      position: relative;
-    }
-
-    .error-close {
-      position: absolute;
-      right: 1rem;
-      background: none;
-      border: none;
-      color: #721c24;
-      cursor: pointer;
-      font-size: 1.2rem;
-    }
-
-    @media (max-width: 768px) {
-      .controls {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .upload-section, .drawing-section, .image-section, .action-section {
-        border-right: none;
-        border-bottom: 1px solid #dee2e6;
-        padding-bottom: 1rem;
-        justify-content: center;
-      }
-
-      .rotation-controls {
-        margin-left: 0;
-        margin-top: 0.5rem;
-      }
-    }
-  `]
+  styleUrl: './page11.component.css',
 })
 export class Page11Component implements AfterViewInit, OnDestroy {
   private readonly zone = inject(NgZone);
@@ -538,8 +229,16 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   private overlayCompleteListener: google.maps.MapsEventListener | null = null;
   private polygons: google.maps.Polygon[] = [];
   protected imageOverlays: ImageOverlayData[] = [];
+  
+  private RotatableImageOverlayClass: any;
 
-  // Reactive state using signals
+  // Enhanced drag control properties
+  private dragThreshold = 0.0001;
+  private lastDragUpdate = 0;
+  private dragUpdateInterval = 16;
+  private minImageSize = 0.001;
+  protected aspectRatioLocked = false;
+
   protected readonly isLoading = signal(true);
   protected readonly isMapReady = signal(false);
   protected readonly drawingMode = signal<string | null>(null);
@@ -569,7 +268,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     const imageInfo = this.uploadedImageInfo();
     const polygon = this.selectedPolygon();
     if (!imageInfo || !polygon) return true;
-    
+
     const polygonBounds = this.getPolygonBounds(polygon);
     const ratioDiff = Math.abs(imageInfo.aspectRatio - polygonBounds.aspectRatio);
     return ratioDiff < 0.1;
@@ -588,18 +287,147 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       this.isLoading.set(true);
       this.errorMessage.set(null);
 
-      await this.zone.runOutsideAngular(async () => {
-        await MapLoaderService.load();
-        this.createMap();
-        this.setupDrawingManager();
-        this.setupEventListeners();
-      });
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Map loading timeout after 15 seconds')), 15000)
+      );
+
+      await Promise.race([
+        this.zone.runOutsideAngular(async () => {
+          await MapLoaderService.load();
+          
+          this.RotatableImageOverlayClass = class RotatableImageOverlay extends google.maps.OverlayView {
+            private bounds: google.maps.LatLngBounds;
+            private image: string;
+            private rotation: number;
+            private div: HTMLDivElement | null = null;
+            private img: HTMLImageElement | null = null;
+            private opacity: number;
+            private clickable: boolean;
+            private clickCallbacks: (() => void)[] = [];
+            private rightClickCallbacks: (() => void)[] = [];
+
+            constructor(
+              bounds: google.maps.LatLngBounds, 
+              image: string, 
+              rotation: number = 0,
+              options: { opacity?: number; clickable?: boolean } = {}
+            ) {
+              super();
+              this.bounds = bounds;
+              this.image = image;
+              this.rotation = rotation;
+              this.opacity = options.opacity ?? 0.8;
+              this.clickable = options.clickable ?? true;
+            }
+
+            onAdd(): void {
+              this.div = document.createElement('div');
+              this.div.style.borderStyle = 'none';
+              this.div.style.borderWidth = '0px';
+              this.div.style.position = 'absolute';
+              this.div.style.cursor = this.clickable ? 'pointer' : 'default';
+              this.div.style.transformOrigin = 'center center';
+              this.div.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+              this.div.style.pointerEvents = this.clickable ? 'auto' : 'none';
+
+              this.img = document.createElement('img');
+              this.img.src = this.image;
+              this.img.style.width = '100%';
+              this.img.style.height = '100%';
+              this.img.style.position = 'absolute';
+              this.img.style.opacity = this.opacity.toString();
+              this.img.style.userSelect = 'none';
+              this.img.style.display = 'block';
+
+              this.div.appendChild(this.img);
+
+              if (this.clickable) {
+                this.div.addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  this.clickCallbacks.forEach(callback => callback());
+                });
+
+                this.div.addEventListener('contextmenu', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  this.rightClickCallbacks.forEach(callback => callback());
+                });
+              }
+
+              const panes = this['getPanes']();
+              if (panes) {
+                panes.overlayLayer.appendChild(this.div);
+              }
+            }
+
+            draw(): void {
+              const overlayProjection = this['getProjection']();
+              if (!overlayProjection || !this.div) return;
+
+              const sw = overlayProjection.fromLatLngToDivPixel(this.bounds.getSouthWest());
+              const ne = overlayProjection.fromLatLngToDivPixel(this.bounds.getNorthEast());
+
+              if (sw && ne) {
+                this.div.style.left = sw.x + 'px';
+                this.div.style.top = ne.y + 'px';
+                this.div.style.width = (ne.x - sw.x) + 'px';
+                this.div.style.height = (sw.y - ne.y) + 'px';
+                this.div.style.transform = `rotate(${this.rotation}deg)`;
+              }
+            }
+
+            onRemove(): void {
+              if (this.div && this.div.parentNode) {
+                this.div.parentNode.removeChild(this.div);
+              }
+              this.div = null;
+              this.img = null;
+              this.clickCallbacks = [];
+              this.rightClickCallbacks = [];
+            }
+
+            setRotation(rotation: number, animate: boolean = true): void {
+              this.rotation = rotation;
+              if (this.div) {
+                if (animate) {
+                  this.div.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                } else {
+                  this.div.style.transition = 'none';
+                }
+                this.div.style.transform = `rotate(${this.rotation}deg)`;
+              }
+            }
+            
+            getRotation(): number { return this.rotation; }
+            setOpacity(opacity: number): void {
+              this.opacity = Math.max(0, Math.min(1, opacity));
+              if (this.img) { this.img.style.opacity = this.opacity.toString(); }
+            }
+            getOpacity(): number { return this.opacity; }
+            setBounds(bounds: google.maps.LatLngBounds): void { this.bounds = bounds; this.draw(); }
+            getBounds(): google.maps.LatLngBounds { return this.bounds; }
+            getDOMElement(): HTMLDivElement | null { return this.div; }
+            addClickListener(callback: () => void): void { this.clickCallbacks.push(callback); }
+            addRightClickListener(callback: () => void): void { this.rightClickCallbacks.push(callback); }
+            setVisible(visible: boolean): void { if (this.div) { this.div.style.display = visible ? 'block' : 'none'; } }
+          };
+
+          this.createMap();
+          this.setupDrawingManager();
+          this.setupEventListeners();
+        }),
+        timeoutPromise
+      ]);
 
       this.isLoading.set(false);
       this.isMapReady.set(true);
     } catch (error) {
       console.error('Failed to initialize Google Maps:', error);
-      this.errorMessage.set('Failed to load Google Maps. Please refresh the page and try again.');
+      this.errorMessage.set(
+        error instanceof Error && error.message.includes('timeout') 
+          ? 'Map loading timed out. Please check your internet connection and try again.'
+          : 'Failed to load Google Maps. Please refresh the page and try again.'
+      );
       this.isLoading.set(false);
     }
   }
@@ -615,7 +443,10 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       zoom: 8,
       mapTypeId: google.maps.MapTypeId.ROADMAP,
       streetViewControl: false,
-      mapTypeControl: false,
+      mapTypeControl: true,
+      fullscreenControl: true,
+      zoomControl: true,
+      gestureHandling: 'greedy'
     });
   }
 
@@ -693,10 +524,10 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     const bounds = rectangle.getBounds()!;
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
-    
+
     const polygonCoords = [
       { lat: ne.lat(), lng: sw.lng() },
-      { lat: ne.lat(), lng: ne.lng() }, 
+      { lat: ne.lat(), lng: ne.lng() },
       { lat: sw.lat(), lng: ne.lng() },
       { lat: sw.lat(), lng: sw.lng() },
     ];
@@ -750,7 +581,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   protected getPolygonBounds(polygon: google.maps.Polygon): PolygonBounds {
     const path = polygon.getPath();
     const bounds = new google.maps.LatLngBounds();
-    
+
     path.forEach(latLng => {
       bounds.extend(latLng);
     });
@@ -758,10 +589,10 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
     const center = bounds.getCenter();
-    
+
     const width = ne.lng() - sw.lng();
     const height = ne.lat() - sw.lat();
-    
+
     return {
       north: ne.lat(),
       south: sw.lat(),
@@ -780,11 +611,11 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       polygon.setMap(null);
       this.polygons.splice(index, 1);
       this.polygonCount.set(this.polygons.length);
-      
+
       if (this.selectedPolygon() === polygon) {
         this.selectedPolygon.set(null);
       }
-      
+
       if (this.polygons.length === 0) {
         this.lastPolygonCoordinates.set([]);
       }
@@ -794,66 +625,72 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   protected overlayImageOnSelected(): void {
     const polygon = this.selectedPolygon();
     const imageInfo = this.uploadedImageInfo();
-    
+
     if (!polygon || !this.uploadedImageUrl || !imageInfo) return;
 
     const bounds = this.getPolygonBounds(polygon);
-    const overlayId = `image_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+    const overlayId = `image_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
     const overlayBounds = new google.maps.LatLngBounds(
       new google.maps.LatLng(bounds.south, bounds.west),
       new google.maps.LatLng(bounds.north, bounds.east)
     );
 
-    const groundOverlay = new google.maps.GroundOverlay(
-      this.uploadedImageUrl,
+    const customOverlay = new this.RotatableImageOverlayClass(
       overlayBounds,
+      this.uploadedImageUrl,
+      0,
       { opacity: 0.8, clickable: true }
     );
-
-    groundOverlay.setMap(this.map);
-
-    const imageOverlayData = this.createImageControlSystem(overlayId, groundOverlay, overlayBounds, this.uploadedImageUrl);
+    
+    customOverlay.setMap(this.map);
+    
+    const imageOverlayData = this.createImageControlSystem(
+      overlayId, 
+      customOverlay,
+      overlayBounds, 
+      this.uploadedImageUrl, 
+      polygon
+    );
+    
+    imageOverlayData.domElement = customOverlay.getDOMElement() || undefined;
+    imageOverlayData.opacity = 0.8;
+    
     this.imageOverlays.push(imageOverlayData);
+
+    customOverlay.addClickListener(() => {
+      this.zone.run(() => this.selectImageOverlay(imageOverlayData));
+    });
+    
+    customOverlay.addRightClickListener(() => {
+      this.zone.run(() => this.removeImageOverlay(imageOverlayData));
+    });
 
     this.selectImageOverlay(imageOverlayData);
     this.imageEditMode.set(true);
     this.updateImageControlsVisibility();
   }
 
-  private createImageControlSystem(id: string, groundOverlay: google.maps.GroundOverlay, bounds: google.maps.LatLngBounds, imageUrl: string): ImageOverlayData {
+  private createImageControlSystem(
+    id: string, 
+    groundOverlay: any,
+    bounds: google.maps.LatLngBounds, 
+    imageUrl: string, 
+    clippingPolygon: google.maps.Polygon
+  ): ImageOverlayData {
     const controlPoints: google.maps.Marker[] = [];
-    
+
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
     const corners = [
-      ne,                                         // NE
-      new google.maps.LatLng(ne.lat(), sw.lng()), // NW
-      sw,                                         // SW
-      new google.maps.LatLng(sw.lat(), ne.lng())  // SE
+      ne,
+      new google.maps.LatLng(ne.lat(), sw.lng()),
+      sw,
+      new google.maps.LatLng(sw.lat(), ne.lng())
     ];
 
     corners.forEach((corner, index) => {
-      const marker = new google.maps.Marker({
-        position: corner,
-        map: this.map,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 6,
-          fillColor: '#4285f4',
-          fillOpacity: 1,
-          strokeColor: 'white',
-          strokeWeight: 2,
-        },
-        draggable: true,
-        visible: false,
-        zIndex: 1000
-      });
-
-      google.maps.event.addListener(marker, 'dragstart', (event: google.maps.MapMouseEvent) => this.startImageDrag(this.getImageOverlayById(id)!, 'corner', event.latLng!));
-      google.maps.event.addListener(marker, 'drag', (event: google.maps.MapMouseEvent) => this.updateImageScale(event.latLng!, index));
-      google.maps.event.addListener(marker, 'dragend', () => this.endImageDrag());
-
+      const marker = this.createCornerMarker(corner, index, id);
       controlPoints.push(marker);
     });
 
@@ -862,48 +699,144 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       position: center,
       map: this.map,
       icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 8,
+        path: 'M-8,-8 L8,-8 L8,8 L-8,8 Z M-4,-4 L4,-4 L4,4 L-4,4 Z',
         fillColor: '#34a853',
         fillOpacity: 1,
-        strokeColor: 'white',
-        strokeWeight: 2,
-      },
-      draggable: true,
-      visible: false,
-      zIndex: 1000
-    });
-
-    google.maps.event.addListener(centerMarker, 'dragstart', (event: google.maps.MapMouseEvent) => this.startImageDrag(this.getImageOverlayById(id)!, 'center', event.latLng!));
-    google.maps.event.addListener(centerMarker, 'drag', (event: google.maps.MapMouseEvent) => this.updateImagePosition(event.latLng!));
-    google.maps.event.addListener(centerMarker, 'dragend', () => this.endImageDrag());
-
-    const rotationHandle = new google.maps.Marker({
-      position: new google.maps.LatLng(center.lat() + (bounds.getNorthEast().lat() - center.lat()) * 1.3, center.lng()),
-      map: this.map,
-      icon: {
-        path: 'M-8,-8 L8,-8 L8,8 L-8,8 Z M-4,-4 L4,-4 L4,4 L-4,4 Z',
-        fillColor: '#ea4335',
-        fillOpacity: 1,
-        strokeColor: 'white',
+        strokeColor: '#ffffff',
         strokeWeight: 2,
         scale: 1
       },
       draggable: true,
       visible: false,
-      zIndex: 1000
+      zIndex: 1000,
+      title: 'Move image'
     });
 
-    google.maps.event.addListener(rotationHandle, 'dragstart', (event: google.maps.MapMouseEvent) => this.startImageDrag(this.getImageOverlayById(id)!, 'rotation', event.latLng!));
-    google.maps.event.addListener(rotationHandle, 'drag', (event: google.maps.MapMouseEvent) => this.updateImageRotation(event.latLng!));
+    const rotationHandle = new google.maps.Marker({
+      position: new google.maps.LatLng(
+        center.lat() + (bounds.getNorthEast().lat() - center.lat()) * 1.3, 
+        center.lng()
+      ),
+      map: this.map,
+      icon: {
+        path: 'M-8,0 A8,8 0 1,1 8,0 A8,8 0 1,1 -8,0 Z M-4,-6 L0,-10 L4,-6 Z',
+        fillColor: '#ea4335',
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWeight: 2,
+        scale: 1
+      },
+      draggable: true,
+      visible: false,
+      zIndex: 1000,
+      title: 'Rotate image'
+    });
+
+    google.maps.event.addListener(centerMarker, 'dragstart', (event: google.maps.MapMouseEvent) => 
+      this.startImageDrag(this.getImageOverlayById(id)!, 'center', event.latLng!)
+    );
+    google.maps.event.addListener(centerMarker, 'drag', (event: google.maps.MapMouseEvent) => 
+      this.updateImagePosition(event.latLng!)
+    );
+    google.maps.event.addListener(centerMarker, 'dragend', () => this.endImageDrag());
+
+    google.maps.event.addListener(rotationHandle, 'dragstart', (event: google.maps.MapMouseEvent) => 
+      this.startImageDrag(this.getImageOverlayById(id)!, 'rotation', event.latLng!)
+    );
+    google.maps.event.addListener(rotationHandle, 'drag', (event: google.maps.MapMouseEvent) => 
+      this.updateImageRotation(event.latLng!)
+    );
     google.maps.event.addListener(rotationHandle, 'dragend', () => this.endImageDrag());
 
-    const imageOverlayData: ImageOverlayData = { id, groundOverlay, bounds, rotation: 0, controlPoints, rotationHandle, centerMarker, originalImageUrl: imageUrl, isSelected: false };
+    return {
+      id,
+      groundOverlay,
+      bounds,
+      rotation: 0,
+      controlPoints,
+      rotationHandle,
+      centerMarker,
+      originalImageUrl: imageUrl,
+      isSelected: false,
+      clippingPolygon,
+      opacity: 0.8
+    };
+  }
 
-    google.maps.event.addListener(groundOverlay, 'click', () => this.zone.run(() => this.selectImageOverlay(imageOverlayData)));
-    google.maps.event.addListener(groundOverlay, 'rightclick', () => this.zone.run(() => this.removeImageOverlay(imageOverlayData)));
+  private createCornerMarker(corner: google.maps.LatLng, index: number, overlayId: string): google.maps.Marker {
+    const marker = new google.maps.Marker({
+      position: corner,
+      map: this.map,
+      icon: {
+        path: 'M-6,-6 L6,-6 Q8,-6 8,-4 L8,4 Q8,6 6,6 L-6,6 Q-8,6 -8,4 L-8,-4 Q-8,-6 -6,-6 Z',
+        fillColor: '#1a73e8',
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWeight: 2,
+        scale: 1,
+        anchor: new google.maps.Point(0, 0)
+      },
+      draggable: true,
+      visible: false,
+      zIndex: 1001,
+      title: `Resize corner ${index + 1} (Hold Shift to lock aspect ratio)`
+    });
 
-    return imageOverlayData;
+    google.maps.event.addListener(marker, 'mouseover', () => {
+      marker.setIcon({
+        ...marker.getIcon() as google.maps.Symbol,
+        fillColor: '#1557b0',
+        strokeWeight: 3,
+        scale: 1.2,
+      });
+    });
+
+    google.maps.event.addListener(marker, 'mouseout', () => {
+      marker.setIcon({
+        ...marker.getIcon() as google.maps.Symbol,
+        fillColor: '#1a73e8',
+        strokeWeight: 2,
+        scale: 1,
+      });
+    });
+
+    google.maps.event.addListener(marker, 'dragstart', (event: google.maps.MapMouseEvent) => {
+      this.aspectRatioLocked = this.isShiftKeyPressed(event);
+      this.startImageDrag(this.getImageOverlayById(overlayId)!, 'corner', event.latLng!);
+      
+      if (this.aspectRatioLocked) {
+        marker.setIcon({
+          ...marker.getIcon() as google.maps.Symbol,
+          fillColor: '#ff9800',
+          strokeWeight: 4,
+          scale: 1.3,
+        });
+      }
+    });
+
+    google.maps.event.addListener(marker, 'drag', (event: google.maps.MapMouseEvent) => {
+      this.aspectRatioLocked = this.isShiftKeyPressed(event) || this.aspectRatioLocked;
+      this.updateImageScale(event.latLng!, index);
+    });
+
+    google.maps.event.addListener(marker, 'dragend', () => {
+      this.aspectRatioLocked = false;
+      this.endImageDrag();
+      marker.setIcon({
+        ...marker.getIcon() as google.maps.Symbol,
+        fillColor: '#1a73e8',
+        strokeWeight: 2,
+        scale: 1,
+      });
+    });
+
+    return marker;
+  }
+
+  private isShiftKeyPressed(event: google.maps.MapMouseEvent): boolean {
+    if (!event.domEvent) return false;
+    const domEvent = event.domEvent as MouseEvent;
+    return domEvent.shiftKey;
   }
 
   private getImageOverlayById(id: string): ImageOverlayData | null {
@@ -939,29 +872,129 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   private updateImageScale(newPosition: google.maps.LatLng, cornerIndex: number): void {
     if (!this.currentDragData || this.currentDragData.handleType !== 'corner') return;
 
+    const now = Date.now();
+    if (now - this.lastDragUpdate < this.dragUpdateInterval) return;
+    this.lastDragUpdate = now;
+
     const overlay = this.currentDragData.overlay;
-    const currentBounds = overlay.bounds;
-    const ne = currentBounds.getNorthEast();
-    const sw = currentBounds.getSouthWest();
-    const nw = new google.maps.LatLng(ne.lat(), sw.lng());
-    const se = new google.maps.LatLng(sw.lat(), ne.lng());
+    
+    const currentAspectRatio = (this.uploadedImageInfo()?.aspectRatio) 
+      ? this.uploadedImageInfo()!.aspectRatio 
+      : (overlay.bounds.toSpan().lng() / overlay.bounds.toSpan().lat());
 
     let newBounds: google.maps.LatLngBounds;
     
-    switch (cornerIndex) {
-      case 0: newBounds = new google.maps.LatLngBounds(sw, newPosition); break;
-      case 1: newBounds = new google.maps.LatLngBounds(new google.maps.LatLng(se.lat(), newPosition.lng()), new google.maps.LatLng(newPosition.lat(), se.lng())); break;
-      case 2: newBounds = new google.maps.LatLngBounds(newPosition, ne); break;
-      case 3: newBounds = new google.maps.LatLngBounds(new google.maps.LatLng(newPosition.lat(), nw.lng()), new google.maps.LatLng(nw.lat(), newPosition.lng())); break;
-      default: return;
+    if (this.aspectRatioLocked) {
+      newBounds = this.calculateBoundsWithAspectRatio(newPosition, cornerIndex, overlay.bounds, currentAspectRatio);
+    } else {
+      newBounds = this.calculateBoundsWithConstraints(newPosition, cornerIndex, overlay.bounds);
     }
+
+    const newWidth = newBounds.toSpan().lng();
+    const newHeight = newBounds.toSpan().lat();
     
-    this.recreateGroundOverlay(overlay, newBounds);
-    this.updateControlHandles(overlay);
+    if (newWidth < this.minImageSize || newHeight < this.minImageSize) return;
+
+    if (this.boundsChangedSignificantly(overlay.bounds, newBounds)) {
+      this.updateCustomOverlayBounds(overlay, newBounds);
+      this.updateControlHandles(overlay);
+    }
   }
+
+  private calculateBoundsWithAspectRatio(
+    newPosition: google.maps.LatLng, 
+    cornerIndex: number, 
+    currentBounds: google.maps.LatLngBounds,
+    aspectRatio: number
+  ): google.maps.LatLngBounds {
+    const oppositeCornerIndex = (cornerIndex + 2) % 4;
+    const oppositeCorner = this.getCurrentCornerPosition(oppositeCornerIndex, currentBounds);
   
-  private updateImagePosition(newPosition: google.maps.LatLng) {
+    const dx = newPosition.lng() - oppositeCorner.lng();
+    const dy = newPosition.lat() - oppositeCorner.lat();
+
+    let newWidth, newHeight;
+    if (Math.abs(dx) / aspectRatio > Math.abs(dy)) {
+        newWidth = Math.abs(dx);
+        newHeight = newWidth / aspectRatio;
+    } else {
+        newHeight = Math.abs(dy);
+        newWidth = newHeight * aspectRatio;
+    }
+
+    const newSwLat = Math.min(oppositeCorner.lat(), oppositeCorner.lat() + (dy > 0 ? newHeight : -newHeight));
+    const newSwLng = Math.min(oppositeCorner.lng(), oppositeCorner.lng() + (dx > 0 ? newWidth : -newWidth));
+
+    return new google.maps.LatLngBounds(
+        new google.maps.LatLng(newSwLat, newSwLng),
+        new google.maps.LatLng(newSwLat + newHeight, newSwLng + newWidth)
+    );
+  }
+
+  private calculateBoundsWithConstraints(
+    newPosition: google.maps.LatLng, 
+    cornerIndex: number, 
+    currentBounds: google.maps.LatLngBounds
+  ): google.maps.LatLngBounds {
+    const ne = currentBounds.getNorthEast();
+    const sw = currentBounds.getSouthWest();
+
+    let newNeLat = ne.lat(), newNeLng = ne.lng(), newSwLat = sw.lat(), newSwLng = sw.lng();
+
+    switch (cornerIndex) {
+      case 0: // NE
+        newNeLat = newPosition.lat(); newNeLng = newPosition.lng();
+        break;
+      case 1: // NW
+        newNeLat = newPosition.lat(); newSwLng = newPosition.lng();
+        break;
+      case 2: // SW
+        newSwLat = newPosition.lat(); newSwLng = newPosition.lng();
+        break;
+      case 3: // SE
+        newSwLat = newPosition.lat(); newNeLng = newPosition.lng();
+        break;
+    }
+
+    return new google.maps.LatLngBounds(
+      new google.maps.LatLng(Math.min(newNeLat, newSwLat), Math.min(newNeLng, newSwLng)),
+      new google.maps.LatLng(Math.max(newNeLat, newSwLat), Math.max(newNeLng, newSwLng))
+    );
+  }
+
+  private getCurrentCornerPosition(cornerIndex: number, bounds: google.maps.LatLngBounds): google.maps.LatLng {
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    
+    switch (cornerIndex) {
+      case 0: return ne;
+      case 1: return new google.maps.LatLng(ne.lat(), sw.lng());
+      case 2: return sw;
+      case 3: return new google.maps.LatLng(sw.lat(), ne.lng());
+      default: return ne; // Should not happen
+    }
+  }
+
+  private boundsChangedSignificantly(oldBounds: google.maps.LatLngBounds, newBounds: google.maps.LatLngBounds): boolean {
+    const threshold = 0.00001; // Epsilon for float comparison
+    return !oldBounds.equals(newBounds) && (
+      Math.abs(oldBounds.getNorthEast().lat() - newBounds.getNorthEast().lat()) > threshold ||
+      Math.abs(oldBounds.getNorthEast().lng() - newBounds.getNorthEast().lng()) > threshold ||
+      Math.abs(oldBounds.getSouthWest().lat() - newBounds.getSouthWest().lat()) > threshold ||
+      Math.abs(oldBounds.getSouthWest().lng() - newBounds.getSouthWest().lng()) > threshold
+    );
+  }
+
+  private updateCustomOverlayBounds(overlay: ImageOverlayData, newBounds: google.maps.LatLngBounds): void {
+    overlay.bounds = newBounds;
+    if (overlay.groundOverlay && typeof overlay.groundOverlay.setBounds === 'function') {
+      overlay.groundOverlay.setBounds(newBounds);
+    }
+  }
+
+  private updateImagePosition(newPosition: google.maps.LatLng): void {
     if (!this.currentDragData || this.currentDragData.handleType !== 'center') return;
+    
     const { overlay, startPosition } = this.currentDragData;
     const latDiff = newPosition.lat() - startPosition.lat();
     const lngDiff = newPosition.lng() - startPosition.lng();
@@ -969,51 +1002,40 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     const oldBounds = overlay.bounds;
     const newSW = new google.maps.LatLng(oldBounds.getSouthWest().lat() + latDiff, oldBounds.getSouthWest().lng() + lngDiff);
     const newNE = new google.maps.LatLng(oldBounds.getNorthEast().lat() + latDiff, oldBounds.getNorthEast().lng() + lngDiff);
-    
-    const newBounds = new google.maps.LatLngBounds(newSW, newNE);
 
-    this.recreateGroundOverlay(overlay, newBounds);
+    const newBounds = new google.maps.LatLngBounds(newSW, newNE);
+    
+    this.currentDragData.startPosition = newPosition;
+    this.updateCustomOverlayBounds(overlay, newBounds);
     this.updateControlHandles(overlay);
   }
 
-  private updateImageRotation(newPosition: google.maps.LatLng) {
+  private updateImageRotation(newPosition: google.maps.LatLng): void {
     if (!this.currentDragData || this.currentDragData.handleType !== 'rotation') return;
+    
     const { overlay } = this.currentDragData;
     const center = overlay.bounds.getCenter();
     const angle = google.maps.geometry.spherical.computeHeading(center, newPosition);
-    
-    // Normalize angle to be degrees from North, not bearing
-    const rotation = (angle < 0) ? (angle + 360) : angle;
-    overlay.rotation = rotation;
 
-    // This part is complex: for true rotation, you'd apply a CSS transform or use a canvas.
-    // For simplicity, we just update the signal. Visually rotating a GroundOverlay is non-trivial.
-    this.selectedImageOverlay.set({ ...overlay }); // Trigger signal update
+    const rotation = (angle + 90 + 360) % 360; // Normalize to 0-360
+    overlay.rotation = rotation;
+    
+    if (overlay.groundOverlay && typeof overlay.groundOverlay.setRotation === 'function') {
+      overlay.groundOverlay.setRotation(rotation, false);
+    }
+    
+    this.selectedImageOverlay.set({ ...overlay });
   }
 
   private endImageDrag(): void {
+    const overlay = this.currentDragData?.overlay;
+    if (overlay) {
+        this.updateControlHandles(overlay); // Final update
+    }
     this.currentDragData = null;
   }
-  
-  private recreateGroundOverlay(overlay: ImageOverlayData, newBounds: google.maps.LatLngBounds): void {
-    overlay.groundOverlay.setMap(null);
-    
-    const newGroundOverlay = new google.maps.GroundOverlay(
-        overlay.originalImageUrl,
-        newBounds,
-        { opacity: overlay.groundOverlay.getOpacity(), clickable: true }
-    );
-    newGroundOverlay.setMap(this.map);
 
-    overlay.groundOverlay = newGroundOverlay;
-    overlay.bounds = newBounds;
-
-    google.maps.event.clearInstanceListeners(overlay.groundOverlay);
-    google.maps.event.addListener(newGroundOverlay, 'click', () => this.zone.run(() => this.selectImageOverlay(overlay)));
-    google.maps.event.addListener(newGroundOverlay, 'rightclick', () => this.zone.run(() => this.removeImageOverlay(overlay)));
-  }
-
-  private updateControlHandles(overlay: ImageOverlayData) {
+  private updateControlHandles(overlay: ImageOverlayData): void {
     const bounds = overlay.bounds;
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
@@ -1024,16 +1046,31 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     overlay.controlPoints[2].setPosition(sw);
     overlay.controlPoints[3].setPosition(new google.maps.LatLng(sw.lat(), ne.lng()));
     overlay.centerMarker.setPosition(center);
-    overlay.rotationHandle.setPosition(new google.maps.LatLng(center.lat() + (ne.lat() - center.lat()) * 1.3, center.lng()));
+    
+    const rotationHandlePos = google.maps.geometry.spherical.computeOffset(
+        center, 
+        google.maps.geometry.spherical.computeDistanceBetween(center, ne) * 0.7, 
+        overlay.rotation - 90
+    );
+    overlay.rotationHandle.setPosition(rotationHandlePos);
   }
 
   protected onImageUpload(event: Event): void {
     const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) {
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    
+    if (file.size > 10 * 1024 * 1024) {
+      this.errorMessage.set('Image file is too large. Please select a file smaller than 10MB.');
       return;
     }
 
-    const file = input.files[0];
+    if (!file.type.startsWith('image/')) {
+      this.errorMessage.set('Please select a valid image file.');
+      return;
+    }
+
     const reader = new FileReader();
 
     reader.onload = (e: ProgressEvent<FileReader>) => {
@@ -1048,15 +1085,26 @@ export class Page11Component implements AfterViewInit, OnDestroy {
           });
         });
       };
+      img.onerror = () => {
+        this.zone.run(() => {
+          this.errorMessage.set('Failed to load the selected image. Please try a different file.');
+        });
+      };
       img.src = this.uploadedImageUrl;
     };
+
+    reader.onerror = () => {
+      this.errorMessage.set('Failed to read the selected file. Please try again.');
+    };
+
     reader.readAsDataURL(file);
+    input.value = ''; // Allow re-uploading the same file
   }
 
   protected setDrawingMode(mode: 'polygon' | 'rectangle' | null): void {
     if (!this.drawingManager) return;
     this.drawingMode.set(mode);
-    const googleMode = mode ? google.maps.drawing.OverlayType[mode.toUpperCase()] : null;
+    const googleMode = mode ? google.maps.drawing.OverlayType[mode.toUpperCase() as keyof typeof google.maps.drawing.OverlayType] : null;
     this.drawingManager.setDrawingMode(googleMode);
   }
 
@@ -1065,68 +1113,149 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     this.updateImageControlsVisibility();
   }
 
-  protected rotateSelectedImage(angle: number): void {
-    const overlay = this.selectedImageOverlay();
-    if (overlay) {
-      overlay.rotation = (overlay.rotation + angle) % 360;
-      this.selectedImageOverlay.set({ ...overlay });
+  protected toggleAspectRatioLock(): void {
+    this.aspectRatioLocked = !this.aspectRatioLocked;
+  }
+
+  protected setDragSensitivity(sensitivity: 'low' | 'medium' | 'high'): void {
+    switch (sensitivity) {
+      case 'low':
+        this.dragThreshold = 0.0005;
+        this.dragUpdateInterval = 32;
+        break;
+      case 'medium':
+        this.dragThreshold = 0.0001;
+        this.dragUpdateInterval = 16;
+        break;
+      case 'high':
+        this.dragThreshold = 0.00001;
+        this.dragUpdateInterval = 8;
+        break;
     }
   }
 
+  protected rotateSelectedImage(angle: number): void {
+    const overlay = this.selectedImageOverlay();
+    if (!overlay) return;
+
+    overlay.rotation = (overlay.rotation + angle + 360) % 360;
+    
+    if (overlay.groundOverlay && typeof overlay.groundOverlay.setRotation === 'function') {
+      overlay.groundOverlay.setRotation(overlay.rotation, true);
+    }
+    
+    this.selectedImageOverlay.set({ ...overlay });
+    this.updateControlHandles(overlay);
+  }
+
+  protected setImageOpacity(value: string): void {
+    const overlay = this.selectedImageOverlay();
+    if (!overlay) return;
+
+    const opacity = parseFloat(value) / 100;
+    overlay.opacity = opacity;
+    
+    if (overlay.groundOverlay && typeof overlay.groundOverlay.setOpacity === 'function') {
+      overlay.groundOverlay.setOpacity(opacity);
+    }
+    
+    this.selectedImageOverlay.set({ ...overlay });
+  }
+
   protected clearAllPolygons(): void {
-    this.polygons.forEach(p => p.setMap(null));
-    this.polygons = [];
-    this.polygonCount.set(0);
-    this.selectedPolygon.set(null);
-    this.lastPolygonCoordinates.set([]);
+    if (this.polygons.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete all ${this.polygons.length} polygons?`)) return;
+
+    [...this.polygons].forEach(p => this.removePolygon(p));
   }
 
   protected clearAllImages(): void {
-    this.imageOverlays.forEach(overlay => this.removeImageOverlayFromMap(overlay));
-    this.imageOverlays = [];
-    this.selectedImageOverlay.set(null);
+    if (this.imageOverlays.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete all ${this.imageOverlays.length} images?`)) return;
+
+    [...this.imageOverlays].forEach(overlay => this.removeImageOverlay(overlay, true));
   }
 
-  private removeImageOverlayFromMap(overlay: ImageOverlayData) {
-    overlay.groundOverlay.setMap(null);
+  private removeImageOverlayFromMap(overlay: ImageOverlayData): void {
+    if (overlay.groundOverlay && overlay.groundOverlay.setMap) {
+      overlay.groundOverlay.setMap(null);
+    }
+    
     overlay.controlPoints.forEach(p => p.setMap(null));
     overlay.rotationHandle.setMap(null);
     overlay.centerMarker.setMap(null);
   }
 
-  private removeImageOverlay(overlayToRemove: ImageOverlayData): void {
+  private removeImageOverlay(overlayToRemove: ImageOverlayData, skipConfirm = false): void {
+    if (!skipConfirm) {
+      if (!confirm('Are you sure you want to delete this image overlay?')) return;
+    }
+
     this.removeImageOverlayFromMap(overlayToRemove);
     this.imageOverlays = this.imageOverlays.filter(o => o.id !== overlayToRemove.id);
+    
     if (this.selectedImageOverlay()?.id === overlayToRemove.id) {
-        this.selectedImageOverlay.set(null);
+      this.selectedImageOverlay.set(null);
     }
   }
-  
+
   protected exportCoordinates(): void {
-    const data = {
-      polygons: this.polygons.map(p => this.getPolygonCoordinates(p)),
-      images: this.imageOverlays.map(img => {
-        const b = img.bounds;
-        return {
-          id: img.id,
-          imageUrl: img.originalImageUrl,
-          rotation: img.rotation,
-          bounds: {
-            north: b.getNorthEast().lat(),
-            east: b.getNorthEast().lng(),
-            south: b.getSouthWest().lat(),
-            west: b.getSouthWest().lng(),
-          }
-        };
-      })
-    };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "map_data.json");
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
+    try {
+      const data = {
+        timestamp: new Date().toISOString(),
+        polygons: this.polygons.map((p, index) => ({
+          id: index + 1,
+          coordinates: this.getPolygonCoordinates(p),
+        })),
+        images: this.imageOverlays.map(img => {
+          const b = img.bounds;
+          return {
+            id: img.id,
+            imageUrl: img.originalImageUrl.substring(0, 50) + '...', // Truncate for export size
+            rotation: img.rotation,
+            opacity: img.opacity || 0.8,
+            bounds: {
+              north: b.getNorthEast().lat(),
+              east: b.getNorthEast().lng(),
+              south: b.getSouthWest().lat(),
+              west: b.getSouthWest().lng(),
+            },
+            size: this.getImageOverlaySize(img)
+          };
+        }),
+        metadata: {
+          totalPolygons: this.polygons.length,
+          totalImages: this.imageOverlays.length,
+          mapCenter: this.map?.getCenter()?.toJSON() || null,
+          mapZoom: this.map?.getZoom() || null
+        }
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", `map_data_${new Date().getTime()}.json`);
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+
+      this.showTemporaryMessage('Data exported successfully!');
+    } catch (error) {
+      console.error('Export failed:', error);
+      this.errorMessage.set('Failed to export data. Please try again.');
+    }
+  }
+
+  private showTemporaryMessage(message: string): void {
+    const originalErrorMessage = this.errorMessage();
+    this.errorMessage.set(message);
+    setTimeout(() => {
+      if (this.errorMessage() === message) {
+        this.errorMessage.set(originalErrorMessage);
+      }
+    }, 3000);
   }
 
   protected clearError(): void {
@@ -1138,7 +1267,6 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
     const se = new google.maps.LatLng(sw.lat(), ne.lng());
-    const nw = new google.maps.LatLng(ne.lat(), sw.lng());
     const width = google.maps.geometry.spherical.computeDistanceBetween(se, sw);
     const height = google.maps.geometry.spherical.computeDistanceBetween(ne, se);
     return `${width.toFixed(1)}m × ${height.toFixed(1)}m`;
@@ -1148,7 +1276,12 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     if (this.overlayCompleteListener) {
       google.maps.event.removeListener(this.overlayCompleteListener);
     }
-    this.clearAllPolygons();
+
+    if (this.map) {
+      google.maps.event.clearInstanceListeners(this.map);
+    }
+    
     this.clearAllImages();
+    this.clearAllPolygons();
   }
 }
