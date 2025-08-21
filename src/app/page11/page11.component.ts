@@ -229,7 +229,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   private overlayCompleteListener: google.maps.MapsEventListener | null = null;
   private polygons: google.maps.Polygon[] = [];
   protected imageOverlays: ImageOverlayData[] = [];
-  
+
   private RotatableImageOverlayClass: any;
 
   // Enhanced drag control properties
@@ -287,14 +287,14 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       this.isLoading.set(true);
       this.errorMessage.set(null);
 
-      const timeoutPromise = new Promise((_, reject) => 
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Map loading timeout after 15 seconds')), 15000)
       );
 
       await Promise.race([
         this.zone.runOutsideAngular(async () => {
           await MapLoaderService.load();
-          
+
           this.RotatableImageOverlayClass = class RotatableImageOverlay extends google.maps.OverlayView {
             private bounds: google.maps.LatLngBounds;
             private image: string;
@@ -307,8 +307,8 @@ export class Page11Component implements AfterViewInit, OnDestroy {
             private rightClickCallbacks: (() => void)[] = [];
 
             constructor(
-              bounds: google.maps.LatLngBounds, 
-              image: string, 
+              bounds: google.maps.LatLngBounds,
+              image: string,
               rotation: number = 0,
               options: { opacity?: number; clickable?: boolean } = {}
             ) {
@@ -397,7 +397,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
                 this.div.style.transform = `rotate(${this.rotation}deg)`;
               }
             }
-            
+
             getRotation(): number { return this.rotation; }
             setOpacity(opacity: number): void {
               this.opacity = Math.max(0, Math.min(1, opacity));
@@ -424,7 +424,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     } catch (error) {
       console.error('Failed to initialize Google Maps:', error);
       this.errorMessage.set(
-        error instanceof Error && error.message.includes('timeout') 
+        error instanceof Error && error.message.includes('timeout')
           ? 'Map loading timed out. Please check your internet connection and try again.'
           : 'Failed to load Google Maps. Please refresh the page and try again.'
       );
@@ -447,6 +447,307 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       fullscreenControl: true,
       zoomControl: true,
       gestureHandling: 'greedy'
+    });
+  }
+
+  private createClippedImageOverlay(
+    bounds: google.maps.LatLngBounds,
+    imageUrl: string,
+    polygon: google.maps.Polygon,
+    rotation: number = 0,
+    opacity: number = 0.8
+  ): any {
+    const ClippedImageOverlay = class extends google.maps.OverlayView {
+      private bounds: google.maps.LatLngBounds;
+      private image: string;
+      private rotation: number;
+      private div: HTMLDivElement | null = null;
+      private canvas: HTMLCanvasElement | null = null;
+      private ctx: CanvasRenderingContext2D | null = null;
+      private img: HTMLImageElement | null = null;
+      private opacity: number;
+      private clickable: boolean;
+      private polygon: google.maps.Polygon;
+      private clickCallbacks: (() => void)[] = [];
+      private rightClickCallbacks: (() => void)[] = [];
+      private isClipped: boolean = true;
+
+      constructor(
+        bounds: google.maps.LatLngBounds,
+        image: string,
+        polygon: google.maps.Polygon,
+        rotation: number = 0,
+        options: { opacity?: number; clickable?: boolean; clipped?: boolean } = {}
+      ) {
+        super();
+        this.bounds = bounds;
+        this.image = image;
+        this.polygon = polygon;
+        this.rotation = rotation;
+        this.opacity = options.opacity ?? 0.8;
+        this.clickable = options.clickable ?? true;
+        this.isClipped = options.clipped ?? true;
+      }
+
+      onAdd(): void {
+        this.div = document.createElement('div');
+        this.div.style.borderStyle = 'none';
+        this.div.style.borderWidth = '0px';
+        this.div.style.position = 'absolute';
+        this.div.style.cursor = this.clickable ? 'pointer' : 'default';
+        this.div.style.transformOrigin = 'center center';
+        this.div.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+        this.div.style.pointerEvents = this.clickable ? 'auto' : 'none';
+
+        if (this.isClipped) {
+          this.canvas = document.createElement('canvas');
+          this.ctx = this.canvas.getContext('2d');
+          this.canvas.style.width = '100%';
+          this.canvas.style.height = '100%';
+          this.canvas.style.position = 'absolute';
+          this.canvas.style.opacity = this.opacity.toString();
+          this.div.appendChild(this.canvas);
+        } else {
+          // Fallback to regular image for edit mode
+          this.img = document.createElement('img');
+          this.img.src = this.image;
+          this.img.style.width = '100%';
+          this.img.style.height = '100%';
+          this.img.style.position = 'absolute';
+          this.img.style.opacity = this.opacity.toString();
+          this.img.style.userSelect = 'none';
+          this.img.style.display = 'block';
+          this.div.appendChild(this.img);
+        }
+
+        if (this.clickable) {
+          this.div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.clickCallbacks.forEach(callback => callback());
+          });
+
+          this.div.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.rightClickCallbacks.forEach(callback => callback());
+          });
+        }
+
+        const panes = this['getPanes']();
+        if (panes) {
+          panes.overlayLayer.appendChild(this.div);
+        }
+
+        if (this.isClipped) {
+          this.loadAndDrawClippedImage();
+        }
+      }
+
+      private loadAndDrawClippedImage(): void {
+        if (!this.canvas || !this.ctx) return;
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+
+        img.onload = () => {
+          this.drawClippedImage(img);
+        };
+
+        img.onerror = () => {
+          console.warn('Failed to load image for clipping, falling back to regular overlay');
+          this.fallbackToRegularImage();
+        };
+
+        img.src = this.image;
+      }
+
+      private drawClippedImage(img: HTMLImageElement): void {
+        if (!this.canvas || !this.ctx) return;
+
+        const overlayProjection = this['getProjection']();
+        if (!overlayProjection) return;
+
+        // Get canvas dimensions
+        const sw = overlayProjection.fromLatLngToDivPixel(this.bounds.getSouthWest());
+        const ne = overlayProjection.fromLatLngToDivPixel(this.bounds.getNorthEast());
+
+        if (!sw || !ne) return;
+
+        const canvasWidth = Math.abs(ne.x - sw.x);
+        const canvasHeight = Math.abs(sw.y - ne.y);
+
+        this.canvas.width = canvasWidth;
+        this.canvas.height = canvasHeight;
+
+        // Clear canvas
+        this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+        // Create clipping path from polygon
+        this.ctx.beginPath();
+        const path = this.polygon.getPath();
+        const pathArray = path.getArray();
+
+        pathArray.forEach((latLng, index) => {
+          const pixel = overlayProjection.fromLatLngToDivPixel(latLng);
+          if (pixel) {
+            // Convert to canvas coordinates relative to image bounds
+            const x = pixel.x - sw.x;
+            const y = pixel.y - ne.y;
+
+            if (index === 0) {
+              this.ctx!.moveTo(x, y);
+            } else {
+              this.ctx!.lineTo(x, y);
+            }
+          }
+        });
+
+        this.ctx.closePath();
+        this.ctx.clip();
+
+        // Apply rotation if needed
+        if (this.rotation !== 0) {
+          this.ctx.save();
+          this.ctx.translate(canvasWidth / 2, canvasHeight / 2);
+          this.ctx.rotate((this.rotation * Math.PI) / 180);
+          this.ctx.translate(-canvasWidth / 2, -canvasHeight / 2);
+        }
+
+        // Draw the image
+        this.ctx.globalAlpha = this.opacity;
+        this.ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+
+        if (this.rotation !== 0) {
+          this.ctx.restore();
+        }
+      }
+
+      private fallbackToRegularImage(): void {
+        if (!this.div || !this.canvas) return;
+
+        this.div.removeChild(this.canvas);
+        this.canvas = null;
+        this.ctx = null;
+
+        this.img = document.createElement('img');
+        this.img.src = this.image;
+        this.img.style.width = '100%';
+        this.img.style.height = '100%';
+        this.img.style.position = 'absolute';
+        this.img.style.opacity = this.opacity.toString();
+        this.img.style.userSelect = 'none';
+        this.img.style.display = 'block';
+        this.div.appendChild(this.img);
+      }
+
+      draw(): void {
+        const overlayProjection = this['getProjection']();
+        if (!overlayProjection || !this.div) return;
+
+        const sw = overlayProjection.fromLatLngToDivPixel(this.bounds.getSouthWest());
+        const ne = overlayProjection.fromLatLngToDivPixel(this.bounds.getNorthEast());
+
+        if (sw && ne) {
+          this.div.style.left = sw.x + 'px';
+          this.div.style.top = ne.y + 'px';
+          this.div.style.width = (ne.x - sw.x) + 'px';
+          this.div.style.height = (sw.y - ne.y) + 'px';
+
+          if (!this.isClipped) {
+            this.div.style.transform = `rotate(${this.rotation}deg)`;
+          }
+
+          // Redraw clipped image if canvas mode and projection changed
+          if (this.isClipped && this.canvas && this.ctx) {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => this.drawClippedImage(img);
+            img.src = this.image;
+          }
+        }
+      }
+
+      onRemove(): void {
+        if (this.div && this.div.parentNode) {
+          this.div.parentNode.removeChild(this.div);
+        }
+        this.div = null;
+        this.canvas = null;
+        this.ctx = null;
+        this.img = null;
+        this.clickCallbacks = [];
+        this.rightClickCallbacks = [];
+      }
+
+      setRotation(rotation: number, animate: boolean = true): void {
+        this.rotation = rotation;
+        if (this.isClipped) {
+          // For clipped images, we need to redraw the canvas
+          if (this.canvas && this.ctx) {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => this.drawClippedImage(img);
+            img.src = this.image;
+          }
+        } else if (this.div) {
+          // For unclipped images, use CSS transform
+          if (animate) {
+            this.div.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+          } else {
+            this.div.style.transition = 'none';
+          }
+          this.div.style.transform = `rotate(${this.rotation}deg)`;
+        }
+      }
+
+      setClipped(clipped: boolean): void {
+        if (this.isClipped === clipped) return;
+
+        this.isClipped = clipped;
+
+        // Remove current content
+        if (this.div) {
+          this.div.innerHTML = '';
+        }
+
+        // Recreate content based on clipping mode
+        this.onAdd();
+      }
+
+      getRotation(): number { return this.rotation; }
+      setOpacity(opacity: number): void {
+        this.opacity = Math.max(0, Math.min(1, opacity));
+        if (this.img) {
+          this.img.style.opacity = this.opacity.toString();
+        }
+        if (this.canvas) {
+          // Need to redraw canvas with new opacity
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => this.drawClippedImage(img);
+          img.src = this.image;
+        }
+      }
+      getOpacity(): number { return this.opacity; }
+      setBounds(bounds: google.maps.LatLngBounds): void {
+        this.bounds = bounds;
+        this.draw();
+      }
+      getBounds(): google.maps.LatLngBounds { return this.bounds; }
+      getDOMElement(): HTMLDivElement | null { return this.div; }
+      addClickListener(callback: () => void): void { this.clickCallbacks.push(callback); }
+      addRightClickListener(callback: () => void): void { this.rightClickCallbacks.push(callback); }
+      setVisible(visible: boolean): void {
+        if (this.div) {
+          this.div.style.display = visible ? 'block' : 'none';
+        }
+      }
+    };
+
+    return new ClippedImageOverlay(bounds, imageUrl, polygon, rotation, {
+      opacity,
+      clickable: true,
+      clipped: true
     });
   }
 
@@ -636,46 +937,139 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       new google.maps.LatLng(bounds.north, bounds.east)
     );
 
-    const customOverlay = new this.RotatableImageOverlayClass(
+    // Set edit mode FIRST, then create overlay based on that mode
+    this.imageEditMode.set(true);
+
+    // Now create overlay with correct clipping mode (false for edit mode)
+    const useClipping = !this.imageEditMode();
+    const customOverlay = useClipping
+      ? this.createClippedImageOverlay(overlayBounds, this.uploadedImageUrl, polygon, 0, 0.8)
+      : new this.RotatableImageOverlayClass(overlayBounds, this.uploadedImageUrl, 0, { opacity: 0.8, clickable: true });
+
+    customOverlay.setMap(this.map);
+
+    const imageOverlayData = this.createImageControlSystem(
+      overlayId,
+      customOverlay,
       overlayBounds,
       this.uploadedImageUrl,
-      0,
-      { opacity: 0.8, clickable: true }
-    );
-    
-    customOverlay.setMap(this.map);
-    
-    const imageOverlayData = this.createImageControlSystem(
-      overlayId, 
-      customOverlay,
-      overlayBounds, 
-      this.uploadedImageUrl, 
       polygon
     );
-    
+
     imageOverlayData.domElement = customOverlay.getDOMElement() || undefined;
     imageOverlayData.opacity = 0.8;
-    
+
     this.imageOverlays.push(imageOverlayData);
 
     customOverlay.addClickListener(() => {
       this.zone.run(() => this.selectImageOverlay(imageOverlayData));
     });
-    
+
     customOverlay.addRightClickListener(() => {
       this.zone.run(() => this.removeImageOverlay(imageOverlayData));
     });
 
     this.selectImageOverlay(imageOverlayData);
-    this.imageEditMode.set(true);
     this.updateImageControlsVisibility();
   }
 
+  // Update the toggleImageEditMode method to switch between clipped and unclipped
+  protected toggleImageEditMode(): void {
+    this.imageEditMode.update(val => !val);
+
+    // Add small delay to ensure DOM is ready for recreation
+    setTimeout(() => {
+      this.updateAllOverlaysForEditMode();
+      this.updateImageControlsVisibility();
+    }, 50);
+  }
+
+  private updateAllOverlaysForEditMode(): void {
+    const isEditMode = this.imageEditMode();
+
+    this.imageOverlays.forEach(overlay => {
+      try {
+        // Store current state
+        const currentRotation = overlay.rotation;
+        const currentOpacity = overlay.opacity || 0.8;
+        const currentBounds = overlay.bounds;
+        const isSelected = overlay.isSelected;
+
+        // Remove old overlay cleanly
+        if (overlay.groundOverlay) {
+          if (overlay.groundOverlay.setMap) {
+            overlay.groundOverlay.setMap(null);
+          }
+
+          // Clear any recreation timeout
+          if (overlay.recreateTimeout) {
+            clearTimeout(overlay.recreateTimeout);
+            overlay.recreateTimeout = undefined;
+          }
+        }
+
+        // Create new overlay with appropriate clipping mode
+        const useClipping = !isEditMode;
+        let newOverlay;
+
+        if (useClipping) {
+          newOverlay = this.createClippedImageOverlay(
+            currentBounds,
+            overlay.originalImageUrl,
+            overlay.clippingPolygon,
+            currentRotation,
+            currentOpacity
+          );
+        } else {
+          newOverlay = new this.RotatableImageOverlayClass(
+            currentBounds,
+            overlay.originalImageUrl,
+            currentRotation,
+            { opacity: currentOpacity, clickable: true }
+          );
+        }
+
+        // Set the new overlay on the map
+        newOverlay.setMap(this.map);
+
+        // Update overlay data
+        overlay.groundOverlay = newOverlay;
+        overlay.rotation = currentRotation;
+        overlay.opacity = currentOpacity;
+        overlay.bounds = currentBounds;
+        overlay.isSelected = isSelected;
+        overlay.domElement = newOverlay.getDOMElement() || undefined;
+
+        // Re-attach event listeners
+        newOverlay.addClickListener(() => {
+          this.zone.run(() => this.selectImageOverlay(overlay));
+        });
+
+        newOverlay.addRightClickListener(() => {
+          this.zone.run(() => this.removeImageOverlay(overlay));
+        });
+
+        // Update control handles if this overlay is selected
+        if (isSelected) {
+          this.selectedImageOverlay.set({ ...overlay });
+          // Small delay to ensure overlay is rendered before updating handles
+          setTimeout(() => this.updateControlHandles(overlay), 100);
+        }
+
+      } catch (error) {
+        console.error('Error updating overlay for edit mode:', error);
+        // Fallback: try to recreate overlay using the old method
+        this.recreateOverlayWithClipping(overlay, !isEditMode);
+      }
+    });
+  }
+
+
   private createImageControlSystem(
-    id: string, 
+    id: string,
     groundOverlay: any,
-    bounds: google.maps.LatLngBounds, 
-    imageUrl: string, 
+    bounds: google.maps.LatLngBounds,
+    imageUrl: string,
     clippingPolygon: google.maps.Polygon
   ): ImageOverlayData {
     const controlPoints: google.maps.Marker[] = [];
@@ -714,7 +1108,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
 
     const rotationHandle = new google.maps.Marker({
       position: new google.maps.LatLng(
-        center.lat() + (bounds.getNorthEast().lat() - center.lat()) * 1.3, 
+        center.lat() + (bounds.getNorthEast().lat() - center.lat()) * 1.3,
         center.lng()
       ),
       map: this.map,
@@ -732,18 +1126,18 @@ export class Page11Component implements AfterViewInit, OnDestroy {
       title: 'Rotate image'
     });
 
-    google.maps.event.addListener(centerMarker, 'dragstart', (event: google.maps.MapMouseEvent) => 
+    google.maps.event.addListener(centerMarker, 'dragstart', (event: google.maps.MapMouseEvent) =>
       this.startImageDrag(this.getImageOverlayById(id)!, 'center', event.latLng!)
     );
-    google.maps.event.addListener(centerMarker, 'drag', (event: google.maps.MapMouseEvent) => 
+    google.maps.event.addListener(centerMarker, 'drag', (event: google.maps.MapMouseEvent) =>
       this.updateImagePosition(event.latLng!)
     );
     google.maps.event.addListener(centerMarker, 'dragend', () => this.endImageDrag());
 
-    google.maps.event.addListener(rotationHandle, 'dragstart', (event: google.maps.MapMouseEvent) => 
+    google.maps.event.addListener(rotationHandle, 'dragstart', (event: google.maps.MapMouseEvent) =>
       this.startImageDrag(this.getImageOverlayById(id)!, 'rotation', event.latLng!)
     );
-    google.maps.event.addListener(rotationHandle, 'drag', (event: google.maps.MapMouseEvent) => 
+    google.maps.event.addListener(rotationHandle, 'drag', (event: google.maps.MapMouseEvent) =>
       this.updateImageRotation(event.latLng!)
     );
     google.maps.event.addListener(rotationHandle, 'dragend', () => this.endImageDrag());
@@ -803,7 +1197,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     google.maps.event.addListener(marker, 'dragstart', (event: google.maps.MapMouseEvent) => {
       this.aspectRatioLocked = this.isShiftKeyPressed(event);
       this.startImageDrag(this.getImageOverlayById(overlayId)!, 'corner', event.latLng!);
-      
+
       if (this.aspectRatioLocked) {
         marker.setIcon({
           ...marker.getIcon() as google.maps.Symbol,
@@ -854,9 +1248,24 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   private updateImageControlsVisibility(): void {
     this.imageOverlays.forEach(overlay => {
       const showControls = this.imageEditMode() && overlay.isSelected;
-      overlay.controlPoints.forEach(marker => { marker.setVisible(showControls); });
-      overlay.centerMarker.setVisible(showControls);
-      overlay.rotationHandle.setVisible(showControls);
+
+      try {
+        overlay.controlPoints.forEach(marker => {
+          if (marker && marker.setVisible) {
+            marker.setVisible(showControls);
+          }
+        });
+
+        if (overlay.centerMarker && overlay.centerMarker.setVisible) {
+          overlay.centerMarker.setVisible(showControls);
+        }
+
+        if (overlay.rotationHandle && overlay.rotationHandle.setVisible) {
+          overlay.rotationHandle.setVisible(showControls);
+        }
+      } catch (error) {
+        console.warn('Error updating control visibility for overlay:', overlay.id, error);
+      }
     });
   }
 
@@ -877,13 +1286,13 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     this.lastDragUpdate = now;
 
     const overlay = this.currentDragData.overlay;
-    
-    const currentAspectRatio = (this.uploadedImageInfo()?.aspectRatio) 
-      ? this.uploadedImageInfo()!.aspectRatio 
+
+    const currentAspectRatio = (this.uploadedImageInfo()?.aspectRatio)
+      ? this.uploadedImageInfo()!.aspectRatio
       : (overlay.bounds.toSpan().lng() / overlay.bounds.toSpan().lat());
 
     let newBounds: google.maps.LatLngBounds;
-    
+
     if (this.aspectRatioLocked) {
       newBounds = this.calculateBoundsWithAspectRatio(newPosition, cornerIndex, overlay.bounds, currentAspectRatio);
     } else {
@@ -892,7 +1301,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
 
     const newWidth = newBounds.toSpan().lng();
     const newHeight = newBounds.toSpan().lat();
-    
+
     if (newWidth < this.minImageSize || newHeight < this.minImageSize) return;
 
     if (this.boundsChangedSignificantly(overlay.bounds, newBounds)) {
@@ -902,38 +1311,38 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   }
 
   private calculateBoundsWithAspectRatio(
-    newPosition: google.maps.LatLng, 
-    cornerIndex: number, 
+    newPosition: google.maps.LatLng,
+    cornerIndex: number,
     currentBounds: google.maps.LatLngBounds,
     aspectRatio: number
   ): google.maps.LatLngBounds {
     const oppositeCornerIndex = (cornerIndex + 2) % 4;
     const oppositeCorner = this.getCurrentCornerPosition(oppositeCornerIndex, currentBounds);
-  
+
     const dx = newPosition.lng() - oppositeCorner.lng();
     const dy = newPosition.lat() - oppositeCorner.lat();
 
     let newWidth, newHeight;
     if (Math.abs(dx) / aspectRatio > Math.abs(dy)) {
-        newWidth = Math.abs(dx);
-        newHeight = newWidth / aspectRatio;
+      newWidth = Math.abs(dx);
+      newHeight = newWidth / aspectRatio;
     } else {
-        newHeight = Math.abs(dy);
-        newWidth = newHeight * aspectRatio;
+      newHeight = Math.abs(dy);
+      newWidth = newHeight * aspectRatio;
     }
 
     const newSwLat = Math.min(oppositeCorner.lat(), oppositeCorner.lat() + (dy > 0 ? newHeight : -newHeight));
     const newSwLng = Math.min(oppositeCorner.lng(), oppositeCorner.lng() + (dx > 0 ? newWidth : -newWidth));
 
     return new google.maps.LatLngBounds(
-        new google.maps.LatLng(newSwLat, newSwLng),
-        new google.maps.LatLng(newSwLat + newHeight, newSwLng + newWidth)
+      new google.maps.LatLng(newSwLat, newSwLng),
+      new google.maps.LatLng(newSwLat + newHeight, newSwLng + newWidth)
     );
   }
 
   private calculateBoundsWithConstraints(
-    newPosition: google.maps.LatLng, 
-    cornerIndex: number, 
+    newPosition: google.maps.LatLng,
+    cornerIndex: number,
     currentBounds: google.maps.LatLngBounds
   ): google.maps.LatLngBounds {
     const ne = currentBounds.getNorthEast();
@@ -965,7 +1374,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
   private getCurrentCornerPosition(cornerIndex: number, bounds: google.maps.LatLngBounds): google.maps.LatLng {
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
-    
+
     switch (cornerIndex) {
       case 0: return ne;
       case 1: return new google.maps.LatLng(ne.lat(), sw.lng());
@@ -994,7 +1403,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
 
   private updateImagePosition(newPosition: google.maps.LatLng): void {
     if (!this.currentDragData || this.currentDragData.handleType !== 'center') return;
-    
+
     const { overlay, startPosition } = this.currentDragData;
     const latDiff = newPosition.lat() - startPosition.lat();
     const lngDiff = newPosition.lng() - startPosition.lng();
@@ -1004,7 +1413,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     const newNE = new google.maps.LatLng(oldBounds.getNorthEast().lat() + latDiff, oldBounds.getNorthEast().lng() + lngDiff);
 
     const newBounds = new google.maps.LatLngBounds(newSW, newNE);
-    
+
     this.currentDragData.startPosition = newPosition;
     this.updateCustomOverlayBounds(overlay, newBounds);
     this.updateControlHandles(overlay);
@@ -1012,25 +1421,25 @@ export class Page11Component implements AfterViewInit, OnDestroy {
 
   private updateImageRotation(newPosition: google.maps.LatLng): void {
     if (!this.currentDragData || this.currentDragData.handleType !== 'rotation') return;
-    
+
     const { overlay } = this.currentDragData;
     const center = overlay.bounds.getCenter();
     const angle = google.maps.geometry.spherical.computeHeading(center, newPosition);
 
     const rotation = (angle + 90 + 360) % 360; // Normalize to 0-360
     overlay.rotation = rotation;
-    
+
     if (overlay.groundOverlay && typeof overlay.groundOverlay.setRotation === 'function') {
       overlay.groundOverlay.setRotation(rotation, false);
     }
-    
+
     this.selectedImageOverlay.set({ ...overlay });
   }
 
   private endImageDrag(): void {
     const overlay = this.currentDragData?.overlay;
     if (overlay) {
-        this.updateControlHandles(overlay); // Final update
+      this.updateControlHandles(overlay); // Final update
     }
     this.currentDragData = null;
   }
@@ -1046,11 +1455,11 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     overlay.controlPoints[2].setPosition(sw);
     overlay.controlPoints[3].setPosition(new google.maps.LatLng(sw.lat(), ne.lng()));
     overlay.centerMarker.setPosition(center);
-    
+
     const rotationHandlePos = google.maps.geometry.spherical.computeOffset(
-        center, 
-        google.maps.geometry.spherical.computeDistanceBetween(center, ne) * 0.7, 
-        overlay.rotation - 90
+      center,
+      google.maps.geometry.spherical.computeDistanceBetween(center, ne) * 0.7,
+      overlay.rotation - 90
     );
     overlay.rotationHandle.setPosition(rotationHandlePos);
   }
@@ -1060,7 +1469,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     if (!input.files || input.files.length === 0) return;
 
     const file = input.files[0];
-    
+
     if (file.size > 10 * 1024 * 1024) {
       this.errorMessage.set('Image file is too large. Please select a file smaller than 10MB.');
       return;
@@ -1108,9 +1517,75 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     this.drawingManager.setDrawingMode(googleMode);
   }
 
-  protected toggleImageEditMode(): void {
-    this.imageEditMode.update(val => !val);
-    this.updateImageControlsVisibility();
+
+
+  private recreateOverlayWithClipping(overlay: ImageOverlayData, useClipping: boolean): void {
+    try {
+      // Store current state
+      const currentRotation = overlay.rotation;
+      const currentOpacity = overlay.opacity || 0.8;
+      const currentBounds = overlay.bounds;
+      const isSelected = overlay.isSelected;
+
+      // Remove old overlay with timeout cleanup
+      if (overlay.groundOverlay) {
+        if (overlay.recreateTimeout) {
+          clearTimeout(overlay.recreateTimeout);
+        }
+
+        if (overlay.groundOverlay.setMap) {
+          overlay.groundOverlay.setMap(null);
+        }
+      }
+
+      // Create new overlay
+      const newOverlay = useClipping
+        ? this.createClippedImageOverlay(
+          currentBounds,
+          overlay.originalImageUrl,
+          overlay.clippingPolygon,
+          currentRotation,
+          currentOpacity
+        )
+        : new this.RotatableImageOverlayClass(
+          currentBounds,
+          overlay.originalImageUrl,
+          currentRotation,
+          { opacity: currentOpacity, clickable: true }
+        );
+
+      // Set timeout to ensure proper cleanup/recreation
+      overlay.recreateTimeout = setTimeout(() => {
+        newOverlay.setMap(this.map);
+
+        // Update overlay data
+        overlay.groundOverlay = newOverlay;
+        overlay.domElement = newOverlay.getDOMElement() || undefined;
+        overlay.rotation = currentRotation;
+        overlay.opacity = currentOpacity;
+        overlay.isSelected = isSelected;
+
+        // Re-attach event listeners
+        newOverlay.addClickListener(() => {
+          this.zone.run(() => this.selectImageOverlay(overlay));
+        });
+
+        newOverlay.addRightClickListener(() => {
+          this.zone.run(() => this.removeImageOverlay(overlay));
+        });
+
+        // Update selection if needed
+        if (isSelected) {
+          this.selectedImageOverlay.set({ ...overlay });
+        }
+
+        overlay.recreateTimeout = undefined;
+      }, 100);
+
+    } catch (error) {
+      console.error('Error in recreateOverlayWithClipping:', error);
+      this.errorMessage.set('Error updating image overlay. Please try refreshing.');
+    }
   }
 
   protected toggleAspectRatioLock(): void {
@@ -1139,11 +1614,11 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     if (!overlay) return;
 
     overlay.rotation = (overlay.rotation + angle + 360) % 360;
-    
+
     if (overlay.groundOverlay && typeof overlay.groundOverlay.setRotation === 'function') {
       overlay.groundOverlay.setRotation(overlay.rotation, true);
     }
-    
+
     this.selectedImageOverlay.set({ ...overlay });
     this.updateControlHandles(overlay);
   }
@@ -1154,17 +1629,17 @@ export class Page11Component implements AfterViewInit, OnDestroy {
 
     const opacity = parseFloat(value) / 100;
     overlay.opacity = opacity;
-    
+
     if (overlay.groundOverlay && typeof overlay.groundOverlay.setOpacity === 'function') {
       overlay.groundOverlay.setOpacity(opacity);
     }
-    
+
     this.selectedImageOverlay.set({ ...overlay });
   }
 
   protected clearAllPolygons(): void {
     if (this.polygons.length === 0) return;
-    
+
     if (!confirm(`Are you sure you want to delete all ${this.polygons.length} polygons?`)) return;
 
     [...this.polygons].forEach(p => this.removePolygon(p));
@@ -1172,17 +1647,23 @@ export class Page11Component implements AfterViewInit, OnDestroy {
 
   protected clearAllImages(): void {
     if (this.imageOverlays.length === 0) return;
-    
+
     if (!confirm(`Are you sure you want to delete all ${this.imageOverlays.length} images?`)) return;
 
     [...this.imageOverlays].forEach(overlay => this.removeImageOverlay(overlay, true));
   }
 
   private removeImageOverlayFromMap(overlay: ImageOverlayData): void {
+    // Clear any pending recreation timeout
+    if (overlay.recreateTimeout) {
+      clearTimeout(overlay.recreateTimeout);
+      overlay.recreateTimeout = undefined;
+    }
+
     if (overlay.groundOverlay && overlay.groundOverlay.setMap) {
       overlay.groundOverlay.setMap(null);
     }
-    
+
     overlay.controlPoints.forEach(p => p.setMap(null));
     overlay.rotationHandle.setMap(null);
     overlay.centerMarker.setMap(null);
@@ -1195,7 +1676,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
 
     this.removeImageOverlayFromMap(overlayToRemove);
     this.imageOverlays = this.imageOverlays.filter(o => o.id !== overlayToRemove.id);
-    
+
     if (this.selectedImageOverlay()?.id === overlayToRemove.id) {
       this.selectedImageOverlay.set(null);
     }
@@ -1280,7 +1761,7 @@ export class Page11Component implements AfterViewInit, OnDestroy {
     if (this.map) {
       google.maps.event.clearInstanceListeners(this.map);
     }
-    
+
     this.clearAllImages();
     this.clearAllPolygons();
   }
